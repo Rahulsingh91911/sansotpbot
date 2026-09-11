@@ -3,7 +3,8 @@
 ══════════════════════════════════════════════════════
   OTP PANEL BOT — PRIVATE ADMIN EDITION           
   Stable Chunk Engine + Ultra Fast Fetch + Live Tracker
-  + 100+ USERS ANTI-CRASH & ANTI-SPAM PROTECTION
+  + 100% Windows Crash Fixed + Smart Search System
+  + Railway Web Server (24/7 Alive)
 ══════════════════════════════════════════════════════
 """
 
@@ -21,6 +22,7 @@ import gc
 from datetime import datetime
 from typing import Optional
 import aiohttp
+from aiohttp import web
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.error import BadRequest, Forbidden, NetworkError
 from telegram.ext import (
@@ -44,7 +46,7 @@ logging.getLogger("aiohttp").setLevel(logging.CRITICAL)
 
 POLL_INTERVAL   = 3  
 PAGE_SIZE       = 20    
-TOKEN           = "8751858624:AAHAA2jMVScmhYECFtLVQ-q89ImsXh6mct8"
+TOKEN           = os.getenv("BOT_TOKEN", "8751858624:AAHAA2jMVScmhYECFtLVQ-q89ImsXh6mct8")
 BOT_USERNAME    = "fjjhfbot"
 CHUNK_SIZE      = 150 
 
@@ -90,10 +92,8 @@ WORKER_SEMAPHORE = asyncio.Semaphore(1500)
 PREFETCH_POOL: dict[str, list] = {}
 PREFETCH_TASKS: dict[str, asyncio.Task] = {}
 
-# 🔥 ANTI-CRASH TRAFFIC LIMITER FOR 100+ USERS
+# 🔥 LIVE PROGRESS TRACKER & ANTI-CRASH LIMITER
 HEAVY_TASK_LIMITER = asyncio.Semaphore(15) 
-
-# 🔥 LIVE PROGRESS TRACKER
 scan_progress = {
     "scanned": 0,
     "total": 0,
@@ -111,11 +111,13 @@ SYS_SETTINGS = {
 }
 
 # ═══════════════════════════════════════════════════════
-#  DATABASES
+#  DATABASES (Hardcoded + Local Files Extract)
 # ═══════════════════════════════════════════════════════
 
 RAW_URLS = [
-    "https://aaaa-b3749-default-rtdb.firebaseio.com", "https://aashish-2e04c-default-rtdb.firebaseio.com"
+    "https://aaaa-b3749-default-rtdb.firebaseio.com", "https://aashish-2e04c-default-rtdb.firebaseio.com",
+    "https://aaya-6e335-default-rtdb.firebaseio.com", "https://aaya2-8df9a-default-rtdb.firebaseio.com",
+    "https://access20-3fc38-default-rtdb.firebaseio.com", "https://activity-e16b3-default-rtdb.firebaseio.com"
 ]
 
 def load_local_txt_dbs():
@@ -243,6 +245,7 @@ async def hourly_admin_backup(app: Application):
                 f"👑 **VIP/Admin Users:** {vip_users}\n"
                 f"🆓 **Free Users:** {free_users}\n"
                 f"🔗 **Total Custom Panels Added:** {total_custom_panels}\n\n"
+                "Auto-Backup Data Attached."
             )
             file_path = os.path.join(SYS_DIR, f"Backup_{int(time.time())}.json")
             with open(file_path, "w", encoding="utf-8") as f:
@@ -264,13 +267,11 @@ def get_user_dbs(uinfo: dict) -> list:
         valid_urls.append(uinfo["custom_db"])
     return list(set(valid_urls))
 
-# 🔥 STRICT ANTI-SPAM PROTECTION
 def is_spamming(user_id: int) -> bool:
     if user_id in ADMIN_IDS: return False
     now = time.time()
     last_click = user_cooldowns.get(user_id, 0)
-    if now - last_click < 3.0: # Increased to 3 seconds for heavy load
-        return True
+    if now - last_click < 1.0: return True
     user_cooldowns[user_id] = now
     return False
 
@@ -284,7 +285,7 @@ async def check_force_join(bot, user_id: int) -> bool:
     return True
 
 async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    pass # Fully silent catch to prevent log flooding during 100+ user peaks
+    pass 
 
 # ═══════════════════════════════════════════════════════
 #  HTTP UTILS
@@ -383,6 +384,52 @@ async def verify_recent_sms(device, max_age_sec=1800) -> tuple[bool, float]:
                     return False, max_sms_ts
     except: pass
     return False, 0.0
+
+async def continuous_prefetch_worker(service: str):
+    while True:
+        try:
+            pool = PREFETCH_POOL.setdefault(service, [])
+            if len(pool) >= 5: 
+                await asyncio.sleep(5)
+                continue
+                
+            all_devices = GLOBAL_DEVICE_CACHE.get("ALL", [])
+            if not all_devices:
+                await asyncio.sleep(5)
+                continue
+                
+            fresh_devices = []
+            for d in all_devices:
+                if d.status == "online" and d.numbers:
+                    is_valid, last_ts = await verify_recent_sms(d, max_age_sec=1800) 
+                    if is_valid:
+                        d.last_sms_ts = last_ts
+                        fresh_devices.append(d)
+                        
+            if not fresh_devices:
+                await asyncio.sleep(10)
+                continue
+                
+            random.shuffle(fresh_devices)
+            in_pool_nums = {item["num"] for item in pool}
+            
+            for d in fresh_devices[:30]:
+                num = d.numbers[0]
+                if num in in_pool_nums: continue
+                seen = False
+                for cid, s_set in user_seen_unreg.items():
+                    if num in s_set: seen = True
+                if seen: continue
+                    
+                res = await check_number_api(service, num)
+                if isinstance(res, dict) and not res.get("status") == "error":
+                    is_reg = res.get("registered", False) or res.get("is_registered", False) or (str(res.get("result", "")).lower() == "registered")
+                    if not is_reg:
+                        pool.append({"device": d, "res": res, "num": num})
+                        break 
+                await asyncio.sleep(0.5)
+        except: pass
+        await asyncio.sleep(3)
 
 # ═══════════════════════════════════════════════════════
 #  UTILITY FORMATTERS & MENUS
@@ -563,6 +610,25 @@ def device_action_keyboard(dev_id: str) -> InlineKeyboardMarkup:
         [InlineKeyboardButton("Disconnect & Back", callback_data="home")],
     ])
 
+def admin_panel_text(bot_token: str) -> str:
+    users_db = all_users
+    total    = len(users_db)
+    total_otps = sum(u.get("otp_count", 0) for u in users_db.values())
+    
+    text = f"ADMIN PANEL (Private)\n━━━━━━━━━━━━━━━━━━\nTotal Users    : {total}\nTotal OTP Views: {total_otps}\n"
+    text += f"━━━━━━━━━━━━━━━━━━\nUpdated: {datetime.now().strftime('%d %b %Y %I:%M %p')}"
+    return text
+
+def admin_keyboard(bot_token: str) -> InlineKeyboardMarkup:
+    keys = [
+        [InlineKeyboardButton("Add Global Panel", callback_data="sa_add_global_panel")],
+        [InlineKeyboardButton("View User Panels", callback_data="sa_view_user_panels")],
+        [InlineKeyboardButton("Export Online Numbers", callback_data="sa_export_numbers")],
+        [InlineKeyboardButton("Download SMS Logs (.txt)", callback_data="sa_download_logs")],
+        [InlineKeyboardButton("Refresh", callback_data="admin_refresh"), InlineKeyboardButton("Close", callback_data="close_msg")]
+    ]
+    return InlineKeyboardMarkup(keys)
+
 async def safe_edit(query, text, reply_markup=None, parse_mode=None, disable_web_page_preview=False):
     try: await query.edit_message_text(text, reply_markup=reply_markup, parse_mode=parse_mode, disable_web_page_preview=disable_web_page_preview)
     except: pass
@@ -703,6 +769,14 @@ async def get_device_sms(device: Device, limit: int = 10, max_age_sec: int = 360
 #  TELEGRAM COMMAND HANDLERS
 # ═══════════════════════════════════════════════════════
 
+# 🛑 RESTORED: Admin command to refresh keyboard
+async def cmd_admin(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id  = update.effective_chat.id
+    if chat_id in ADMIN_IDS:
+        await update.message.reply_text("✅ Admin Keyboard Refreshed!", reply_markup=get_reply_menu(chat_id))
+    else:
+        await update.message.reply_text("❌ You are not authorized.")
+
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id  = update.effective_chat.id
     bot_token = ctx.bot.token
@@ -758,7 +832,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(welcome_text, reply_markup=get_reply_menu(chat_id), parse_mode="Markdown")
 
 # ═══════════════════════════════════════════════════════
-#  CALLBACK QUERY HANDLER (Catch All Shield)
+#  CALLBACK QUERY HANDLER
 # ═══════════════════════════════════════════════════════
 
 async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -947,6 +1021,51 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             await safe_edit(query, "ADD GLOBAL PANEL\n━━━━━━━━━━━━━━━━━━\nApna Firebase URL (ya multiple URLs enter se separate karke) bhejein.\n\nCancel: /cancel", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="admin_refresh")]]))
             return
 
+        if data == "sa_view_user_panels":
+            msg_text = "USERS CUSTOM PANELS\n━━━━━━━━━━━━━━━━━━\n\n"
+            for uid, uinfo in users_db.items():
+                dbs = get_user_dbs(uinfo)
+                if dbs:
+                    msg_text += f"User: {uid}\n"
+                    for db in dbs: msg_text += f"{db}\n"
+                    msg_text += "\n"
+            if msg_text == "USERS CUSTOM PANELS\n━━━━━━━━━━━━━━━━━━\n\n":
+                msg_text += "Koi custom panel nahi mila."
+            if len(msg_text) > 4000: msg_text = msg_text[:4000] + "\n...[Truncated]"
+            await safe_edit(query, msg_text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Back", callback_data="admin_refresh")]]))
+            return
+
+        if data == "sa_export_numbers":
+            devices = await get_all_devices(bot_token, chat_id, users_db)
+            online_nums = []
+            for d in devices:
+                if d.status == "online":
+                    online_nums.extend(d.numbers)
+            if not online_nums:
+                await query.answer("Filhal koi bhi number online nahi hai.", show_alert=True)
+                return
+            file_path = os.path.join(SYS_DIR, "Online_Numbers.txt")
+            unique_online = set(online_nums)
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(unique_online))
+            await ctx.bot.send_document(
+                chat_id=chat_id, document=open(file_path, "rb"), 
+                filename="Active_Online_Numbers.txt", caption=f"Total Active Unique Numbers: {len(unique_online)}"
+            )
+            return
+
+        if data == "sa_download_logs":
+            if not os.path.exists(SMS_LOG_FILE):
+                await query.answer("Log file abhi tak bani nahi hai.", show_alert=True)
+                return
+            await ctx.bot.send_document(chat_id=chat_id, document=open(SMS_LOG_FILE, "rb"), filename="Master_SMS_Log.txt", caption="Master SMS Database Log")
+            return
+
+        if data == "admin_refresh":
+            user_focus.setdefault(bot_token, {}).pop(chat_id, None)
+            await safe_edit(query, admin_panel_text(bot_token), reply_markup=admin_keyboard(bot_token))
+            return
+
         if data == "home":
             user_focus.setdefault(bot_token, {}).pop(chat_id, None)
             pending_action.pop(chat_id, None)
@@ -1001,6 +1120,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             
             user_focus.setdefault(bot_token, {})[chat_id] = dev_id
             label = device_label(device)
+            
             smss  = await get_device_sms(device, limit=10, max_age_sec=3600)
             
             if service_used:
@@ -1083,7 +1203,6 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         users_db = all_users
         if is_spamming(chat_id): return
 
-        # 🔥 SEARCH NUMBER ADDED HERE
         if text == "Search Number":
             user_focus.setdefault(bot_token, {}).pop(chat_id, None)
             pending_action[chat_id] = {"action": "search_live_number"}
@@ -1147,6 +1266,17 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             user_focus.setdefault(bot_token, {}).pop(chat_id, None)
             pending_action[chat_id] = {"action": "set_personal_db"}
             await update.message.reply_text("➕ **ADD CUSTOM PANELS**\n━━━━━━━━━━━━━━━━━━\nAap apni ek ya multiple Firebase URLs bhej sakte hain (Paragraph ya list format me). Bot automatically link extract kar lega.\n\nCancel: /cancel", parse_mode="Markdown")
+            return
+
+        if text == "Super Admin" and chat_id in ADMIN_IDS:
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("Add Global Panel", callback_data="sa_add_global_panel")],
+                [InlineKeyboardButton("View User Panels", callback_data="sa_view_user_panels")],
+                [InlineKeyboardButton("Export Online Numbers", callback_data="sa_export_numbers")],
+                [InlineKeyboardButton("Download SMS Logs (.txt)", callback_data="sa_download_logs")],
+                [InlineKeyboardButton("Close", callback_data="close_msg")]
+            ])
+            await update.message.reply_text("SUPER ADMIN MENU\nChoose an advanced option:", reply_markup=kb)
             return
 
         if text == "Devices List":
@@ -1239,7 +1369,6 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
         action = state.get("action")
         
-        # 🔥 SEARCH LIVE NUMBER PROCESSING
         if action == "search_live_number":
             pending_action.pop(chat_id)
             clean_search = re.sub(r"\D", "", text)[-10:]
@@ -1330,6 +1459,21 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                             f.write("\n".join(list(set([f"+91{num[-10:]}" for num in registered_list]))))
                         try: await ctx.bot.send_document(chat_id=chat_id, document=open(file_path, "rb"), filename=file_name, caption=f"📁 Bulk Check Registered Numbers ({service.upper()})")
                         except: pass
+            return
+
+        if action == "sa_set_global_panel" and chat_id in ADMIN_IDS:
+            pending_action.pop(chat_id)
+            urls = re.findall(r'https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+', text)
+            firebase_urls = [u for u in urls if 'firebaseio.com' in u or 'firebasedatabase.app' in u]
+            if not firebase_urls:
+                await update.message.reply_text("Koi valid Firebase URL nahi mili.")
+                return
+                
+            global_list = SETTINGS.get("global_panels", [])
+            global_list.extend(firebase_urls)
+            SETTINGS["global_panels"] = global_list
+            save_settings()
+            await update.message.reply_text(f"✅ SUCCESS! {len(firebase_urls)} panels Global Default list me add ho gaye hain.")
             return
 
         if action == "set_personal_db":
@@ -1576,6 +1720,26 @@ async def poll_loop(app: Application) -> None:
         await asyncio.sleep(POLL_INTERVAL)
 
 # ═══════════════════════════════════════════════════════
+#  RAILWAY WEB SERVER (KEEPS BOT ALIVE 24/7)
+# ═══════════════════════════════════════════════════════
+
+async def health_check(request):
+    return web.Response(text="Bot is running! OTP Panel Active.")
+
+async def start_web_server():
+    try:
+        app = web.Application()
+        app.router.add_get('/', health_check)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        port = int(os.environ.get("PORT", 8080))
+        site = web.TCPSite(runner, '0.0.0.0', port)
+        await site.start()
+        print(f"✅ Web server started on port {port} (Railway Alive)")
+    except Exception as e:
+        print(f"⚠️ Web Server Error: {e}")
+
+# ═══════════════════════════════════════════════════════
 #  MAIN ENTRY POINT
 # ═══════════════════════════════════════════════════════
 
@@ -1604,6 +1768,7 @@ def main() -> None:
 
     async def post_init(application: Application) -> None:
         load_data()
+        asyncio.create_task(start_web_server())   # 🔥 Binds port for Railway
         asyncio.create_task(global_cache_loop())  
         asyncio.create_task(poll_loop(application)) 
         asyncio.create_task(auto_save_loop())
